@@ -13,39 +13,38 @@
         
         # Simple NuGet package restoration script
         nugetRestore = pkgs.writeShellScriptBin "nuget-restore" ''
-          echo "Restoring NuGet packages..."
-          
-          # Create packages directory if it doesn't exist
-          mkdir -p packages
-          
-          # Download Microsoft.WSL.PluginApi directly from NuGet
-          PACKAGE_VERSION="2.1.3"
-          PACKAGE_NAME="Microsoft.WSL.PluginApi"
-          PACKAGE_DIR="packages/$PACKAGE_NAME.$PACKAGE_VERSION"
-          
-          if [ ! -d "$PACKAGE_DIR" ]; then
-            echo "Downloading $PACKAGE_NAME $PACKAGE_VERSION..."
-            
-            # Create temp directory for download
-            TEMP_DIR=$(mktemp -d)
-            cd "$TEMP_DIR"
-            
-            # Download the nupkg file
-            ${pkgs.curl}/bin/curl -L \
-              "https://www.nuget.org/api/v2/package/$PACKAGE_NAME/$PACKAGE_VERSION" \
-              -o "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
-            
-            # Extract the package (nupkg is just a zip file)
-            ${pkgs.unzip}/bin/unzip -q "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
-            
-            # Move to packages directory
-            cd "$OLDPWD"
-            mv "$TEMP_DIR" "$PACKAGE_DIR"
-            
-            echo "Package restored to $PACKAGE_DIR"
-          else
-            echo "Package $PACKAGE_NAME $PACKAGE_VERSION already exists"
-          fi
+echo "Restoring NuGet packages for WSL Plugin..."
+
+# Create packages directory if it doesn't exist
+mkdir -p packages
+
+# Download Microsoft.WSL.PluginApi directly from NuGet
+PACKAGE_VERSION="2.1.3"
+PACKAGE_NAME="Microsoft.WSL.PluginApi"
+PACKAGE_DIR="packages/$PACKAGE_NAME.$PACKAGE_VERSION"
+
+if [ ! -d "$PACKAGE_DIR" ]
+then
+  echo "Downloading $PACKAGE_NAME $PACKAGE_VERSION..."
+  
+  # Create temp directory for download
+  TEMP_DIR=$(mktemp -d)
+  cd "$TEMP_DIR"
+  
+  # Download the nupkg file
+  ${pkgs.curl}/bin/curl -L "https://www.nuget.org/api/v2/package/$PACKAGE_NAME/$PACKAGE_VERSION" -o "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
+  
+  # Extract the package (nupkg is just a zip file)
+  ${pkgs.unzip}/bin/unzip -q "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
+  
+  # Move to packages directory
+  cd "$OLDPWD"
+  mv "$TEMP_DIR" "$PACKAGE_DIR"
+  
+  echo "Package restored to $PACKAGE_DIR"
+else
+  echo "Package $PACKAGE_NAME $PACKAGE_VERSION already exists"
+fi
         '';
 
         # Simple build instructions script
@@ -71,8 +70,7 @@
           echo ""
           echo "Output will be in x64/Release/ (MSBuild) or current directory (MinGW)"
           echo ""
-          echo "Restoring NuGet packages now..."
-          nuget-restore
+          echo "Use the nuget command to restore packages manually if needed."
         '';
 
         # Wine MSBuild wrapper
@@ -128,9 +126,7 @@
             jq
             
             # Custom scripts
-            nugetRestore
             buildHelper
-            msbuildWine
           ];
           
           shellHook = ''
