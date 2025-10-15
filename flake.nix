@@ -20,7 +20,7 @@ ${pkgs.nuget}/bin/nuget restore packages.config -PackagesDirectory ./packages
 echo ""
 echo "✅ Package restoration completed!"
 echo "📁 Packages should be in: ./packages/"
-echo "Ready to build with: msbuild.exe wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo "Ready to build with: msbuild wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
         '';
 
         # Simple build instructions script  
@@ -28,15 +28,25 @@ echo "Ready to build with: msbuild.exe wsl-plugin-sample.sln /p:Configuration=Re
 echo "🔧 WSL Plugin Build Helper"
 echo "========================="
 echo ""
+echo "⚠️  NOTE: Mono MSBuild lacks Visual C++ support for .vcxproj files"
+echo ""
+echo "Build options:"
+echo ""
 echo "1. First, restore NuGet packages:"
 echo "   nuget-restore"
 echo ""
-echo "2. Then build with MSBuild:"
-echo "   msbuild.exe wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo "2a. Try Mono MSBuild (limited C++ support):"
+echo "    msbuild wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo ""
+echo "2b. Use Wine with Visual Studio Build Tools:"
+echo "    nix develop .#wine"
+echo "    msbuild-wine wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo ""
+echo "2c. Use MinGW cross-compilation:"
+echo "    nix develop .#mingw"
+echo "    # Manual build with x86_64-w64-mingw32-gcc"
 echo ""
 echo "Output will be in x64/Release/"
-echo ""
-echo "Use the nuget command to restore packages manually if needed."
         '';
 
         # Wine MSBuild wrapper
@@ -82,6 +92,7 @@ echo "Use the nuget command to restore packages manually if needed."
             # .NET/MSBuild related
             dotnet-sdk_8
             mono
+            msbuild
             
             # Package management and utilities
             nuget
@@ -94,6 +105,7 @@ echo "Use the nuget command to restore packages manually if needed."
             # Custom scripts
             nugetRestore
             buildHelper
+            msbuildWine
           ];
           
           shellHook = ''
