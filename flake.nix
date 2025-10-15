@@ -14,63 +14,29 @@
         # Simple NuGet package restoration script
         nugetRestore = pkgs.writeShellScriptBin "nuget-restore" ''
 echo "Restoring NuGet packages for WSL Plugin..."
-
-# Create packages directory if it doesn't exist
-mkdir -p packages
-
-# Download Microsoft.WSL.PluginApi directly from NuGet
-PACKAGE_VERSION="2.1.3"
-PACKAGE_NAME="Microsoft.WSL.PluginApi"
-PACKAGE_DIR="packages/$PACKAGE_NAME.$PACKAGE_VERSION"
-
-if [ ! -d "$PACKAGE_DIR" ]
-then
-  echo "Downloading $PACKAGE_NAME $PACKAGE_VERSION..."
-  
-  # Create temp directory for download
-  TEMP_DIR=$(mktemp -d)
-  cd "$TEMP_DIR"
-  
-  # Download the nupkg file
-  ${pkgs.curl}/bin/curl -L "https://www.nuget.org/api/v2/package/$PACKAGE_NAME/$PACKAGE_VERSION" -o "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
-  
-  # Extract the package (nupkg is just a zip file)
-  ${pkgs.unzip}/bin/unzip -q "$PACKAGE_NAME.$PACKAGE_VERSION.nupkg"
-  
-  # Move to packages directory
-  cd "$OLDPWD"
-  mv "$TEMP_DIR" "$PACKAGE_DIR"
-  
-  echo "Package restored to $PACKAGE_DIR"
-else
-  echo "Package $PACKAGE_NAME $PACKAGE_VERSION already exists"
-fi
+echo ""
+echo "Running: nuget restore packages.config -PackagesDirectory ./packages"
+${pkgs.nuget}/bin/nuget restore packages.config -PackagesDirectory ./packages
+echo ""
+echo "✅ Package restoration completed!"
+echo "📁 Packages should be in: ./packages/"
+echo "Ready to build with: msbuild.exe wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
         '';
 
-        # Simple build instructions script
+        # Simple build instructions script  
         buildHelper = pkgs.writeShellScriptBin "build-plugin" ''
-          echo "🔧 WSL Plugin Build Helper"
-          echo "========================="
-          echo ""
-          echo "1. First, restore NuGet packages:"
-          echo "   nuget-restore"
-          echo ""
-          echo "2. Then build with one of these methods:"
-          echo ""
-          echo "🪟 Windows/WSL (recommended):"
-          echo "   msbuild.exe wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
-          echo ""
-          echo "🍷 Wine MSBuild:"
-          echo "   msbuild-wine wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
-          echo ""
-          echo "🔨 MinGW direct compilation:"
-          echo "   x86_64-w64-mingw32-gcc -shared -o sample-wsl-plugin.dll plugin.cpp \\"
-          echo "     -I./packages/Microsoft.WSL.PluginApi.2.1.3/build/native/include \\"
-          echo "     -lws2_32"
-          echo ""
-          echo "Output will be in x64/Release/ (MSBuild) or current directory (MinGW)"
-          echo ""
-          echo "Use the nuget command to restore packages manually if needed."
+echo "🔧 WSL Plugin Build Helper"
+echo "========================="
+echo ""
+echo "1. First, restore NuGet packages:"
+echo "   nuget-restore"
+echo ""
+echo "2. Then build with MSBuild:"
+echo "   msbuild.exe wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo ""
+echo "Output will be in x64/Release/"
+echo ""
+echo "Use the nuget command to restore packages manually if needed."
         '';
 
         # Wine MSBuild wrapper
@@ -126,6 +92,7 @@ fi
             jq
             
             # Custom scripts
+            nugetRestore
             buildHelper
           ];
           
@@ -134,9 +101,8 @@ fi
             echo "====================================="
             echo ""
             echo "Available commands:"
-            echo "  build-plugin    - Show build instructions and restore packages"
-            echo "  nuget-restore   - Download Microsoft.WSL.PluginApi NuGet package"
-            echo "  msbuild-wine    - MSBuild wrapper using Wine (requires setup)"
+            echo "  nuget-restore   - Restore NuGet packages from packages.config"
+            echo "  build-plugin    - Show build instructions"
             echo ""
             echo "Cross-compilation tools:"
             echo "  CC=$CC"
