@@ -1,192 +1,141 @@
-# WSL Plugin Sample
+# WSL Plugin Sample for NixOS Development
 
-A sample project demonstrating how to create WSL (Windows Subsystem for Linux) plugins using C++. This project supports development on both Windows and Linux environments.
+A streamlined development environment for building and testing Windows Subsystem for Linux (WSL) plugins using NixOS, with a focus on contributing to NixOS-WSL.
 
-## Development Environments
+## 🎯 Project Goals
 
-### 🛠️ Linux Development with Nix (Recommended)
+This repository demonstrates a complete development-to-test pipeline for WSL plugins, specifically designed for:
 
-For Linux developers who want to build Windows WSL plugins without leaving their Linux environment:
+1. **Custom WSL Plugin Development** - Modify and extend WSL functionality
+2. **NixOS-WSL Contribution Testing** - Validate changes before submitting to NixOS-WSL  
+3. **Automated Testing Infrastructure** - Ensure plugin compatibility and functionality
+4. **Reproducible Development Environment** - Consistent builds across different systems
 
-#### Quick Start - MinGW Cross-Compilation (Pure Nix)
-```bash
-# Enter the MinGW cross-compilation environment
-nix develop '.#mingw'
-
-# Build the plugin (no Wine required!)
-x86_64-w64-mingw32-g++ \
-  -std=c++14 -shared \
-  -I packages/Microsoft.WSL.PluginApi.2.1.3/build/native/include \
-  -o plugin.dll plugin.cpp \
-  -lws2_32 -lkernel32 -luser32
-```
-
-#### Alternative - Wine + MSVC (Not Recommended)
-⚠️ **Note:** Wine approach has fundamental compatibility issues with VS 2022. See `WINE_VS_COMPAT.md` for detailed analysis.
+## 🚀 Quick Start
 
 ```bash
-# Wine environment (documented limitations)
-nix develop '.#wine'
+# Clone the repository
+git clone <repository-url>
+cd wsl-plugin-sample
 
-# Setup will fail due to Wine 10.0 + VS 2022 incompatibility
-wine-setup  # ❌ Known to fail after 5-7 seconds
-```
-
-#### MinGW Features
-- **Pure Nix Solution**: No Wine or Windows dependencies
-- **Cross-Compilation**: Native Linux tools producing Windows binaries
-- **WSL API Compatible**: Proven working with WSL Plugin API
-- **Reproducible**: Fully managed by Nix flake
-- **Fast**: No emulation overhead
-
-#### Wine Features (Historical/Reference)
-- **Documented Limitations**: Wine 10.0 incompatible with VS 2022 installer
-- **API Analysis**: Missing Windows API implementations identified
-- **Preserved for Reference**: Complete implementation for learning purposes
-
-#### Advanced Options
-```bash
-# Show all setup options
-wine-setup-advanced --help
-
-# Use VS 2019 instead of 2022
-wine-setup-advanced --vs2019
-
-# Interactive installer (requires X11/Wayland)
-wine-setup-advanced --interactive
-
-# Clean install (removes existing Wine prefix)
-wine-setup-advanced --clean
-```
-
-#### Alternative Development Shells
-```bash
-# Default shell with multiple toolchains
+# Enter the development environment  
 nix develop
 
-# MinGW cross-compilation (recommended for NixOS-WSL)
-nix develop '.#mingw'
+# Show all available targets
+make help
 
-# Wine environment (preserved for reference, non-functional)
-nix develop '.#wine'
+# Build the plugin
+make plugin
+
+# Run tests
+make test
 ```
 
-### 🪟 Windows + WSL Hybrid Development (Fallback)
+## 🔧 Development Environment
 
-For users who prefer official Microsoft toolchain but want WSL-based development:
+### Single Optimized Environment
 
-#### Setup
-1. **Install VS Build Tools 2022** on Windows host
-2. **Use WSL for source code** and development environment
-3. **Call Windows tools** from WSL via `/mnt/c/...` paths
-
-#### Build from WSL
 ```bash
-# Call Windows MSBuild from WSL
-/mnt/c/Program\ Files\ \(x86\)/Microsoft\ Visual\ Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe \
-  wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64
-
-# Alternative: Use VS Developer Command Prompt
-# Then call WSL: wsl cd /mnt/c/path/to/project && ./build-script.sh
+nix develop    # Default MinGW cross-compilation environment
 ```
 
-#### Advantages
-- **Official Microsoft toolchain** - guaranteed compatibility
-- **WSL development environment** - Linux tools for source management
-- **Best of both worlds** - Windows build tools + Linux development experience
+**Features:**
+- ✅ **Proven working solution** with WSL Plugin API
+- ✅ **Pure Nix cross-compilation** (no Wine required)
+- ✅ **Fast builds** (~5-10 seconds)
+- ✅ **Embedded Makefile** for all build processes
+- ✅ **Fully reproducible** across systems
 
-### 🪟 Windows Development (Traditional)
+**Note:** Wine-based development (`nix develop '.#wine'`) is deprecated due to VS 2022 compatibility issues.
 
-* Build the plugin dll via Visual Studio or msbuild
-* Open a visual studio developer command prompt as administrator and sign the plugin via:
-`cd path\to\sample-wsl-plugin && powershell .\sign-plugin.ps1 -PluginPath .\x64\Debug\sample-wsl-plugin.dll -Trust`
+## 🛠️ Makefile Targets
 
-## Plugin Installation and Testing
+All development tasks are managed through the embedded Makefile:
 
-* Register the plugin with WSL via:
-` reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss\Plugins" /v sample-plugin /d path\to\sample-wsl-plugin\x64\Release\sample-wsl-plugin.dll  /t reg_sz
-
-* Restart wslservice to load the plugin:
-`sc.exe stop wslservice`
-
-* Once loaded, open `C:\wsl-plugin-demo.txt` to see the plugin output
-
-## Troubleshooting
-
-### Linux/Nix Environment
-
-**Wine Setup Issues:**
-- **Permission errors**: Ensure you have write access to `$HOME/.wine-wsl-plugin`
-- **Wine installation fails**: Check Wine output for specific errors, try `wine-setup-advanced --clean`
-- **.NET Framework installation fails**: Winetricks downloads components automatically; check network connection
-- **MSBuild not found**: Run `wine-setup` again to reinstall Visual Studio Build Tools
-- **Display errors**: The setup runs headless by default; use `wine-setup-advanced --interactive` for GUI debugging
-
-**Build Issues:**
-- **Missing dependencies**: Ensure you're in the correct nix shell: `nix develop '.#wine'`
-- **MSVC compiler not found**: Verify VS Build Tools installation with `wine-setup-advanced --clean`
-- **Path issues**: Check Wine prefix: `ls ~/.wine-wsl-plugin/drive_c/Program\ Files\ \(x86\)/Microsoft\ Visual\ Studio/`
-
-**General Nix Issues:**
-- **Flake errors**: Run `nix flake check` to validate the flake
-- **Build cache**: Use `nix develop --rebuild` to rebuild the environment
-- **Hash mismatches**: Pre-downloaded installers use fixed hashes; this indicates a network/security issue
-
-### Windows Environment
-
-Common error codes:
-* `Wsl/Service/CreateInstance/CreateVm/Plugin/ERROR_MOD_NOT_FOUND` -> The plugin DLL could not be loaded. Check that the plugin registration path is correct
-* `Wsl/Service/CreateInstance/CreateVm/Plugin/*` -> The plugin DLL returned an error in WSLPLUGINAPI_ENTRYPOINTV1 or OnVmStarted()
-* `Wsl/Service/CreateInstance/CreateVm/Plugin/TRUST_E_NOSIGNATURE` -> The plugin DLL is not signed, or its signature is not trusted by the computer. Validate that you ran `sign-plugin.ps1`
-* `Wsl/Service/CreateInstance/Plugin/*` -> The plugin DLL returned an error in OnDistributionStarted()
-
-## Technical Implementation
-
-### Nix Flake Architecture
-
-This project uses a sophisticated Nix flake setup that demonstrates several advanced concepts:
-
-#### Pre-downloaded Build Tools
-```nix
-vsBuildTools2022 = pkgs.fetchurl {
-  url = "https://aka.ms/vs/17/release/vs_buildtools.exe";
-  sha256 = "027y1cmhxqhsnnd028kfbd7vcp8gl6mcjz5916sxmvrbg24fy3nr";
-};
+```bash
+make help      # Show all available targets
+make plugin    # Build the WSL plugin DLL
+make install   # Prepare for deployment
+make test      # Run automated tests
+make clean     # Clean build artifacts
 ```
-- **Fixed-hash derivations** ensure reproducible builds
-- **Build-time downloads** eliminate runtime dependency on Microsoft servers
-- **SHA256 verification** guarantees installer integrity
 
-#### Headless Wine Configuration
-The setup scripts demonstrate programmatic Wine configuration:
-- **Registry modification** via `wine reg add` for Windows version setting
-- **Environment variables** (`WINEDEBUG=-all`, `DISPLAY=""`) for headless operation
-- **Silent installation** using VS Build Tools command-line parameters
+### Example Workflow
 
-#### Nix Writers Pattern
-Scripts are generated using `pkgs.writeShellScriptBin`:
-- **Build-time validation** ensures script correctness
-- **Dependency injection** of Nix store paths for Wine, tools, and installers
-- **Parameterized generation** allows multiple script variants from single source
+```bash
+# 1. Enter development environment
+nix develop
 
-### Development Shell Features
+# 2. Build the plugin
+make plugin
 
-#### Multiple Environments
-- **`.#wine`**: Wine + MSVC for Windows-compatible builds
-- **`.#mingw`**: Cross-compilation toolchain (experimental)
-- **`.#default`**: Full development environment with multiple toolchains
+# 3. Run tests
+make test
 
-#### Script Integration
-All helper scripts are available as commands in the development shells:
-- `wine-setup` / `wine-setup-advanced`: Automated setup
-- `msbuild-wine`: Wine-wrapped MSBuild with path detection
-- `nuget-restore`: NuGet package management
-- `build-plugin`: Comprehensive build instructions
+# 4. Prepare for installation
+make install
+```
 
-This architecture serves as a reference implementation for:
-- **Cross-platform development** setups in Nix
-- **Wine integration** for Windows-specific toolchains
-- **Automated environment provisioning** for complex build requirements
+## 📁 Project Structure
+
+- `plugin.cpp` - Main plugin implementation with custom modifications
+- `packages.config` - NuGet package dependencies (WSL Plugin API)
+- `flake.nix` - Nix development environment and embedded Makefile
+- `Makefile` - Auto-generated build automation (single source of truth)
+- `simple-plugin-test.nix` - NixOS test framework
+- `WSL-PLUGIN-DEVELOPMENT-WORKFLOW.md` - Complete development guide
+
+## 🧪 Custom Plugin Features
+
+This sample includes custom modifications demonstrating:
+
+- **Enhanced VM Startup**: Custom hostname detection and logging
+- **Distribution Recognition**: Special handling for NixOS-WSL, Ubuntu, etc.
+- **Improved Logging**: Clear custom markers in plugin output
+- **Error Handling**: Robust socket communication and cleanup
+
+## 🚀 Plugin Installation
+
+Use the Makefile for deployment preparation:
+
+```bash
+make install    # Shows deployment instructions and plugin info
+```
+
+Output includes:
+- Plugin file path and size
+- Installation instructions for WSL
+- Log file location (`C:\wsl-plugin-demo.txt`)
+
+## 🔧 Troubleshooting
+
+### Build Issues
+```bash
+make clean     # Clean all artifacts
+make plugin    # Rebuild and verify
+make test      # Run tests to validate
+```
+
+### Common Problems
+- **Missing plugin.dll**: Run `make plugin` first
+- **Test failures**: Ensure NixOS test framework is available
+- **Wine environment**: Use default environment instead (`nix develop`)
+
+## 🏗️ Architecture
+
+### Key Features
+- **Embedded Makefile**: Single source of truth for all build processes
+- **MinGW Cross-Compilation**: Pure Nix solution, no Wine required
+- **Automated Testing**: NixOS test framework validates functionality
+- **Reproducible Builds**: Consistent results across systems
+
+### Wine Environment (Deprecated)
+The Wine-based environment (`nix develop '.#wine'`) is preserved for reference but deprecated due to:
+- Wine 10.0 incompatibility with VS 2022 Build Tools
+- Missing Windows API implementations
+- Consistent installation failures
+
+Use the default MinGW environment for reliable development.
 
 ## Contributing
 

@@ -28,8 +28,27 @@ std::vector<char> ReadFromSocket(SOCKET socket)
 
 HRESULT OnVmStarted(const WSLSessionInformation* Session, const WSLVmCreationSettings* Settings)
 {
+    g_logfile << "=== CUSTOM WSL PLUGIN: VM STARTED ===" << std::endl;
     g_logfile << "VM created. SessionId=" << Session->SessionId
         << ", CustomConfigurationFlags=" << Settings->CustomConfigurationFlags << std::endl;
+
+    // CUSTOM FEATURE: Launch hostname command to identify the VM
+    std::vector<const char*> hostname_args = { "/bin/hostname", nullptr };
+    SOCKET hostname_socket{};
+
+    auto hostname_result = g_api->ExecuteBinary(Session->SessionId, hostname_args[0], hostname_args.data(), &hostname_socket);
+    if (SUCCEEDED(hostname_result))
+    {
+        auto hostname_output = ReadFromSocket(hostname_socket);
+        closesocket(hostname_socket);
+        
+        if (!hostname_output.empty())
+        {
+            if (hostname_output.back() == '\n') hostname_output.pop_back();
+            if (hostname_output.back() != '\0') hostname_output.emplace_back('\0');
+            g_logfile << "CUSTOM: Hostname detected: " << hostname_output.data() << std::endl;
+        }
+    }
 
     // Launch cat /proc/version to get the VM's kernel version
     std::vector<const char*> arguments = { "/bin/cat", "/proc/version", nullptr };
@@ -64,6 +83,7 @@ HRESULT OnVmStarted(const WSLSessionInformation* Session, const WSLVmCreationSet
     }
 
     g_logfile << "Kernel version info: " << output.data() << std::endl;
+    g_logfile << "CUSTOM: WSL Plugin initialization complete!" << std::endl;
 
     return S_OK;
 }
@@ -79,9 +99,20 @@ HRESULT OnDistroStarted(const WSLSessionInformation* Session, const WSLDistribut
 {
     std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
 
+    g_logfile << "=== CUSTOM: DISTRIBUTION STARTED ===" << std::endl;
     g_logfile << "Distribution started. Sessionid= " << Session->SessionId << ", Name=" << converter.to_bytes(Distribution->Name)
         << ", Package=" << converter.to_bytes(Distribution->PackageFamilyName) << ", PidNs=" << Distribution->PidNamespace
         << ", InitPid=" << Distribution->InitPid << std::endl;
+    
+    // CUSTOM FEATURE: Log a welcome message for specific distributions
+    std::string distro_name = converter.to_bytes(Distribution->Name);
+    if (distro_name.find("NixOS") != std::string::npos) {
+        g_logfile << "CUSTOM: Welcome to NixOS-WSL! Detected NixOS distribution." << std::endl;
+    } else if (distro_name.find("Ubuntu") != std::string::npos) {
+        g_logfile << "CUSTOM: Ubuntu distribution detected." << std::endl;
+    } else {
+        g_logfile << "CUSTOM: Generic Linux distribution detected: " << distro_name << std::endl;
+    }
 
     return S_OK;
 }
@@ -131,8 +162,10 @@ EXTERN_C __declspec(dllexport) HRESULT WSLPLUGINAPI_ENTRYPOINTV1(const WSLPlugin
         return E_ABORT;
     }
 
+    g_logfile << "=== CUSTOM WSL PLUGIN LOADED ===" << std::endl;
     g_logfile << "Plugin loaded. WSL version: " << Api->Version.Major << "." << Api->Version.Minor << "." << Api->Version.Revision
         << std::endl;
+    g_logfile << "CUSTOM: This is a custom WSL plugin for development/testing purposes." << std::endl;
 
     // Require WSL >= 2.1.3 since we OnDistributionRegistered
     WSL_PLUGIN_REQUIRE_VERSION(2, 1, 3, Api);

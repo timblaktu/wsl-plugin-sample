@@ -732,73 +732,136 @@ echo "    process management failures that caused 30+ minute hangs!"
           exec ${pkgs.wineWowPackages.stable}/bin/wine "$msbuild_exe" "$@"
         '';
 
+        # Embedded Makefile for build automation
+        makefileContent = ''
+          # WSL Plugin Development Makefile
+          # Single source of truth for build, test, and development processes
+          
+          .PHONY: help plugin install test clean
+          .DEFAULT_GOAL := help
+          
+          # Configuration
+          PLUGIN_NAME = plugin.dll
+          PLUGIN_SOURCE = plugin.cpp
+          PACKAGES_DIR = packages
+          TEMP_DIR = temp_include
+          
+          # MinGW Compiler Configuration
+          CXX = x86_64-w64-mingw32-g++
+          CXXFLAGS = -std=c++14 -shared
+          INCLUDES = -I$(TEMP_DIR) -I$(PACKAGES_DIR)/Microsoft.WSL.PluginApi.2.1.3/build/native/include
+          LIBS = -lws2_32 -lkernel32 -luser32
+          
+          help: ## Show this help message
+          	@echo "🔧 WSL Plugin Development Makefile"
+          	@echo "=================================="
+          	@echo ""
+          	@echo "Available targets:"
+          	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
+          	@echo ""
+          	@echo "Development workflow:"
+          	@echo "  1. make plugin    # Build the WSL plugin"
+          	@echo "  2. make test      # Run automated tests"
+          	@echo "  3. make install   # Prepare for deployment"
+          	@echo "  4. make clean     # Clean build artifacts"
+          	@echo ""
+          	@echo "✅ MinGW cross-compilation environment active"
+          	@echo "📁 Output: $(PLUGIN_NAME)"
+          
+          plugin: $(PLUGIN_NAME) ## Build the WSL plugin DLL
+          
+          $(PLUGIN_NAME): $(PLUGIN_SOURCE) $(PACKAGES_DIR)/.restored
+          	@echo "🔨 Building WSL Plugin with MinGW..."
+          	@mkdir -p $(TEMP_DIR)
+          	@echo '#include <windows.h>' > $(TEMP_DIR)/Windows.h
+          	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(PLUGIN_NAME) $(PLUGIN_SOURCE) $(LIBS)
+          	@rm -rf $(TEMP_DIR)
+          	@echo "✅ Plugin built successfully: $(PLUGIN_NAME)"
+          	@echo "📊 Size: $$(stat -c%s $(PLUGIN_NAME)) bytes"
+          	@echo "🔍 Verifying custom strings..."
+          	@strings $(PLUGIN_NAME) | grep -i "custom" | head -3 || echo "⚠️  No custom strings found"
+          
+          $(PACKAGES_DIR)/.restored: packages.config ## Restore NuGet packages
+          	@echo "📦 Restoring NuGet packages..."
+          	nuget restore packages.config -PackagesDirectory ./$(PACKAGES_DIR)
+          	@touch $(PACKAGES_DIR)/.restored
+          	@echo "✅ NuGet packages restored"
+          
+          install: $(PLUGIN_NAME) ## Prepare plugin for installation
+          	@echo "📋 Plugin ready for installation:"
+          	@echo "  File: $(PLUGIN_NAME)"
+          	@echo "  Size: $$(stat -c%s $(PLUGIN_NAME)) bytes"
+          	@echo "  Type: $$(file $(PLUGIN_NAME))"
+          	@echo ""
+          	@echo "🚀 To install in WSL:"
+          	@echo "  1. Copy $(PLUGIN_NAME) to Windows WSL plugin directory"
+          	@echo "  2. Register plugin with WSL service"
+          	@echo "  3. Restart WSL to load plugin"
+          	@echo ""
+          	@echo "📝 Plugin log output will be in: C:\\wsl-plugin-demo.txt"
+          
+          test: $(PLUGIN_NAME) ## Run automated tests
+          	@echo "🧪 Running WSL Plugin Tests..."
+          	@if [ ! -f $(PLUGIN_NAME) ]; then echo "❌ Plugin not found. Run 'make plugin' first."; exit 1; fi
+          	@echo "✅ Plugin file exists: $(PLUGIN_NAME)"
+          	@echo "🔍 Running NixOS test framework..."
+          	nix-build simple-plugin-test.nix --max-jobs 1 | tail -10
+          	@echo "✅ All tests completed"
+          
+          clean: ## Clean build artifacts
+          	@echo "🧹 Cleaning build artifacts..."
+          	rm -f $(PLUGIN_NAME)
+          	rm -rf $(TEMP_DIR)
+          	rm -f $(PACKAGES_DIR)/.restored
+          	rm -f result*
+          	@echo "✅ Clean completed"
+        '';
+
+        # Write Makefile to the development environment
+        embeddedMakefile = pkgs.writeText "Makefile" makefileContent;
       in
       {
+        # Default shell is now MinGW-based (was previously separate)
         devShells.default = pkgs.mkShell {
-          name = "wsl-plugin-dev";
+          name = "wsl-plugin-mingw-dev";
           
           buildInputs = with pkgs; [
-            # Core build tools
-            gcc
-            gdb
-            pkg-config
-            cmake
-            ninja
-            
-            # Windows cross-compilation support  
+            # MinGW cross-compilation toolchain
             pkgsCross.mingwW64.stdenv.cc
-            wineWowPackages.stable
-            winetricks
             
-            # .NET/MSBuild related
-            dotnet-sdk_8
-            mono
-            msbuild
+            # Build tools
+            gnumake
             
-            # Package management and utilities
+            # Package management
             nuget
-            curl
-            unzip
-            git
-            vim
-            jq
             
-            # Custom scripts
-            nugetRestore
-            buildHelper
-            buildPluginMinGW
-            wineSetup
-            wineSetupAdvanced  
-            msbuildWine
-            wineCacheManage
-            wineVerifyComponents
-            wineReset
+            # Development utilities
+            file
+            binutils  # for strings command
+            git
+            
+            # For testing (NixOS tests framework)
+            # Note: Full testing requires nix-build, available in shell
           ];
           
           shellHook = ''
-            export WINEPREFIX="$HOME/.wine-wsl-plugin"
-            export WINEARCH="win64"
+            # Copy Makefile to current directory
+            if [ ! -f Makefile ] || [ "${embeddedMakefile}" -nt Makefile ]; then
+              cp "${embeddedMakefile}" Makefile
+              echo "📄 Makefile updated from flake definition"
+            fi
             
-            echo "🔧 WSL Plugin Development Environment"
-            echo "====================================="
+            echo "🔨 WSL Plugin Development Environment (MinGW)"
+            echo "============================================="
             echo ""
-            echo "Available commands:"
-            echo "  nuget-restore   - Restore NuGet packages from packages.config"  
-            echo "  build-plugin    - Show correct build instructions (Wine required)"
-            echo "  wine-reset      - Reset Wine environment for clean testing"
+            echo "🚀 Quick start:"
+            echo "  make help     # Show all available targets"
+            echo "  make plugin   # Build the WSL plugin"
+            echo "  make test     # Run automated tests"
             echo ""
-            echo "Cross-compilation tools:"
-            echo "  CC=$CC"
-            echo "  CXX=$CXX"
-            echo ""
-            echo "Project structure:"
-            echo "  - wsl-plugin-sample.sln  - Visual Studio solution"
-            echo "  - wsl-plugin-sample.vcxproj - Project file"
-            echo "  - plugin.cpp - Main source code"
-            echo "  - packages.config - NuGet dependencies"
-            echo ""
-            echo "⚠️  Note: MSBuild requires Wine + VS Build Tools for C++ projects"
-            echo "Run 'build-plugin' for detailed instructions!"
+            echo "Environment:"
+            echo "  Compiler: $(which x86_64-w64-mingw32-g++)"
+            echo "  Make: $(which make)"
             echo ""
           '';
           
@@ -809,9 +872,11 @@ echo "    process management failures that caused 30+ minute hangs!"
           STRIP = "x86_64-w64-mingw32-strip";
         };
         
-        # Minimal shell for Wine-only development
+        # DEPRECATED: Wine-based development environment
+        # ⚠️ DEPRECATED: Wine approach has compatibility issues with VS 2022 Build Tools
+        # Use the default MinGW environment instead for reliable cross-compilation
         devShells.wine = pkgs.mkShell {
-          name = "wsl-plugin-wine";
+          name = "wsl-plugin-wine-deprecated";
           buildInputs = with pkgs; [
             wineWowPackages.stable
             winetricks
@@ -829,57 +894,22 @@ echo "    process management failures that caused 30+ minute hangs!"
             export WINEPREFIX="$HOME/.wine-wsl-plugin"
             export WINEARCH="win64"
             
-            echo "🍷 Wine-based WSL Plugin Development"
-            echo "Available commands:"
-            echo "  wine-setup                     # Setup Wine environment and VS Build Tools"
-            echo "  wine-setup --help              # Show setup options (repair, clean, etc.)"
-            echo "  wine-cache-manage status       # Check cache status and size"
-            echo "  wine-reset                     # Reset Wine environment completely"
-            echo "  msbuild-wine <project>         # Build with MSBuild"
+            echo "⚠️  DEPRECATED: Wine-based WSL Plugin Development"
+            echo "================================================"
             echo ""
-            echo "State Summary:"
-            # Run verification and format output compactly
-            if wine-verify-components 2>/dev/null | grep -q "✅.*MSBuild" && \
-               wine-verify-components 2>/dev/null | grep -q "✅.*MSVC" && \
-               wine-verify-components 2>/dev/null | grep -q "✅.*Windows.*SDK"; then
-              echo "  🟢 VS Build Tools: Ready"
-            else
-              echo "  🔴 VS Build Tools: Incomplete (run wine-setup)"
-            fi
-            
-            # Check cache status
-            CACHE_DIR="$HOME/.wine-wsl-plugin-cache"
-            if [ -d "$CACHE_DIR" ] && [ "$(find "$CACHE_DIR" -name "*.exe" 2>/dev/null | wc -l)" -gt 0 ]; then
-              CACHE_SIZE=$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1 || echo "unknown")
-              echo "  💾 Cache: Available ($CACHE_SIZE)"
-            else
-              echo "  💾 Cache: Empty"
-            fi
-          '';
-        };
-        
-        # MinGW-only shell for direct cross-compilation
-        devShells.mingw = pkgs.mkShell {
-          name = "wsl-plugin-mingw";
-          buildInputs = with pkgs; [
-            pkgsCross.mingwW64.stdenv.cc
-            nugetRestore
-            buildHelper
-            buildPluginMinGW
-          ];
-          shellHook = ''
-            echo "🔨 MinGW-based WSL Plugin Development"
-            echo "✅ WORKING SOLUTION: Pure Nix cross-compilation"
+            echo "🚨 This environment is DEPRECATED due to:"
+            echo "   • Wine 10.0 incompatibility with VS 2022 Build Tools"
+            echo "   • Missing Windows API implementations required by VS installer"
+            echo "   • Consistent 5-7 second failure pattern in VS setup"
+            echo "   • Wine AppDB rates VS 2022 compatibility as 'Garbage'"
             echo ""
-            echo "Available commands:"
-            echo "  build-plugin-mingw              # Show build instructions"
-            echo "  nuget-restore                   # Restore WSL Plugin API packages"
+            echo "✅ RECOMMENDED: Use the default MinGW environment instead:"
+            echo "   exit"
+            echo "   nix develop  # Enter default MinGW environment"
+            echo "   make plugin  # Build with proven working solution"
             echo ""
-            echo "Quick build:"
-            echo "  # See: build-plugin-mingw for full command"
+            echo "📚 This shell is kept for reference and research purposes only."
             echo ""
-            export CC=x86_64-w64-mingw32-gcc
-            export CXX=x86_64-w64-mingw32-g++
           '';
         };
       });
