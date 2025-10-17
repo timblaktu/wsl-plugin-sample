@@ -399,3 +399,10 @@ FodyWeavers.xsd
 
 .claude/
 CLAUDE.md
+
+# MinGW build outputs
+*.dll
+*.exe
+
+# Temporary build files
+temp_include/
