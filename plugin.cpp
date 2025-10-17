@@ -1,6 +1,7 @@
 #include <fstream>
 #include <vector>
 #include <codecvt>
+#include <locale>
 
 #include "WslPluginApi.h"
 

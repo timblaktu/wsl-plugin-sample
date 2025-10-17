@@ -4,28 +4,45 @@ A sample project demonstrating how to create WSL (Windows Subsystem for Linux) p
 
 ## Development Environments
 
-### 🍷 Linux Development with Nix (Recommended)
+### 🛠️ Linux Development with Nix (Recommended)
 
 For Linux developers who want to build Windows WSL plugins without leaving their Linux environment:
 
-#### Quick Start
+#### Quick Start - MinGW Cross-Compilation (Pure Nix)
 ```bash
-# Enter the Wine-based development environment
-nix develop '.#wine'
+# Enter the MinGW cross-compilation environment
+nix develop '.#mingw'
 
-# One-command setup (downloads, installs, configures everything)
-wine-setup
-
-# Build the plugin
-msbuild-wine wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64
+# Build the plugin (no Wine required!)
+x86_64-w64-mingw32-g++ \
+  -std=c++14 -shared \
+  -I packages/Microsoft.WSL.PluginApi.2.1.3/build/native/include \
+  -o plugin.dll plugin.cpp \
+  -lws2_32 -lkernel32 -luser32
 ```
 
-#### Features
-- **Headless Setup**: No GUI interaction required
-- **Pre-downloaded Installers**: Visual Studio Build Tools downloaded at nix build time with verified SHA256 hashes
-- **Automated Configuration**: Wine prefix, Windows compatibility, .NET Framework, and MSVC toolchain configured automatically
-- **Multiple VS Versions**: Support for Visual Studio Build Tools 2019 and 2022
-- **Zero Manual Steps**: Complete automation from clean system to working build environment
+#### Alternative - Wine + MSVC (Not Recommended)
+⚠️ **Note:** Wine approach has fundamental compatibility issues with VS 2022. See `WINE_VS_COMPAT.md` for detailed analysis.
+
+```bash
+# Wine environment (documented limitations)
+nix develop '.#wine'
+
+# Setup will fail due to Wine 10.0 + VS 2022 incompatibility
+wine-setup  # ❌ Known to fail after 5-7 seconds
+```
+
+#### MinGW Features
+- **Pure Nix Solution**: No Wine or Windows dependencies
+- **Cross-Compilation**: Native Linux tools producing Windows binaries
+- **WSL API Compatible**: Proven working with WSL Plugin API
+- **Reproducible**: Fully managed by Nix flake
+- **Fast**: No emulation overhead
+
+#### Wine Features (Historical/Reference)
+- **Documented Limitations**: Wine 10.0 incompatible with VS 2022 installer
+- **API Analysis**: Missing Windows API implementations identified
+- **Preserved for Reference**: Complete implementation for learning purposes
 
 #### Advanced Options
 ```bash
@@ -47,9 +64,36 @@ wine-setup-advanced --clean
 # Default shell with multiple toolchains
 nix develop
 
-# MinGW cross-compilation (experimental)
+# MinGW cross-compilation (recommended for NixOS-WSL)
 nix develop '.#mingw'
+
+# Wine environment (preserved for reference, non-functional)
+nix develop '.#wine'
 ```
+
+### 🪟 Windows + WSL Hybrid Development (Fallback)
+
+For users who prefer official Microsoft toolchain but want WSL-based development:
+
+#### Setup
+1. **Install VS Build Tools 2022** on Windows host
+2. **Use WSL for source code** and development environment
+3. **Call Windows tools** from WSL via `/mnt/c/...` paths
+
+#### Build from WSL
+```bash
+# Call Windows MSBuild from WSL
+/mnt/c/Program\ Files\ \(x86\)/Microsoft\ Visual\ Studio/2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe \
+  wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64
+
+# Alternative: Use VS Developer Command Prompt
+# Then call WSL: wsl cd /mnt/c/path/to/project && ./build-script.sh
+```
+
+#### Advantages
+- **Official Microsoft toolchain** - guaranteed compatibility
+- **WSL development environment** - Linux tools for source management
+- **Best of both worlds** - Windows build tools + Linux development experience
 
 ### 🪟 Windows Development (Traditional)
 

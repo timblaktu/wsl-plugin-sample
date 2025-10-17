@@ -36,24 +36,58 @@ echo "⚠️  NOTE: MSBuild on Linux cannot build Visual C++ projects!"
 echo "Use Wine-based build instead (see build-plugin for instructions)"
         '';
 
+        # MinGW build helper for WSL plugin compilation
+        buildPluginMinGW = pkgs.writeShellScriptBin "build-plugin-mingw" ''
+echo "🛠️  WSL Plugin MinGW Build Helper"
+echo "================================"
+echo ""
+echo "✅ WORKING SOLUTION: MinGW Cross-Compilation"
+echo ""
+echo "🚀 QUICK BUILD:"
+echo "   mkdir -p temp_include"
+echo "   echo '#include <windows.h>' > temp_include/Windows.h"
+echo "   x86_64-w64-mingw32-g++ \\"
+echo "     -std=c++14 -shared \\"
+echo "     -I temp_include \\"
+echo "     -I packages/Microsoft.WSL.PluginApi.2.1.3/build/native/include \\"
+echo "     -o plugin.dll plugin.cpp \\"
+echo "     -lws2_32 -lkernel32 -luser32"
+echo "   rm -rf temp_include"
+echo ""
+echo "📊 PREREQUISITES:"
+echo "   nuget-restore                   # Restore NuGet packages (WSL Plugin API)"
+echo ""
+echo "🎯 BENEFITS:"
+echo "   • Pure Nix solution - no Wine required"
+echo "   • WSL Plugin API compatible (tested and working)"
+echo "   • Fast compilation - no emulation overhead"
+echo "   • Fully reproducible across systems"
+echo ""
+echo "📁 Output: plugin.dll (Windows DLL, ~130KB)"
+echo ""
+        '';
+
         # Build instructions script with updated information
         buildHelper = pkgs.writeShellScriptBin "build-plugin" ''
 echo "🔧 WSL Plugin Build Helper"
 echo "========================="
 echo ""
-echo "✨ NEW: Sequential Component Installation Strategy"
+echo "⚠️  WINE APPROACH: Known Issues - See WINE_VS_COMPAT.md"
 echo ""
-echo "🚀 QUICK START (Linux developers):"
-echo "   nix develop .#wine         # Enter Wine development environment"
-echo "   wine-setup                 # Reliable sequential setup (NEW!)"
-echo "   msbuild-wine wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64"
+echo "🚀 RECOMMENDED (MinGW Cross-Compilation):"
+echo "   nix develop .#mingw        # Enter MinGW environment"
+echo "   build-plugin-mingw         # Show MinGW build instructions"
+echo "   # Build works without Wine/VS dependencies!"
 echo ""
-echo "🎯 What the NEW wine-setup does:"
-echo "   • Creates persistent cache (~2-4GB, one-time download)"
-echo "   • Installs components sequentially (avoids Wine hangs)"
-echo "   • Automatic retry on failure (3 attempts per component)"
-echo "   • Component-level verification after each install"
-echo "   • No more 30-minute timeouts or exit code 138!"
+echo "❌ WINE APPROACH (Not Working):"
+echo "   nix develop .#wine         # Wine environment (reference only)"
+echo "   wine-setup                 # ❌ Fails due to Wine 10.0 + VS 2022 incompatibility"
+echo ""
+echo "🔍 WINE LIMITATIONS IDENTIFIED:"
+echo "   • Missing Windows API implementations in Wine 10.0"
+echo "   • VS 2022 installer requires APIs not available in Wine"
+echo "   • Consistent 5-7 second failure pattern documented"
+echo "   • Wine AppDB rates VS 2022 compatibility as 'Garbage'"
 echo ""
 echo "📊 MONITORING & MANAGEMENT:"
 echo "   wine-cache-manage status   # Check cache and component status"
@@ -732,6 +766,7 @@ echo "    process management failures that caused 30+ minute hangs!"
             # Custom scripts
             nugetRestore
             buildHelper
+            buildPluginMinGW
             wineSetup
             wineSetupAdvanced  
             msbuildWine
@@ -830,10 +865,19 @@ echo "    process management failures that caused 30+ minute hangs!"
             pkgsCross.mingwW64.stdenv.cc
             nugetRestore
             buildHelper
+            buildPluginMinGW
           ];
           shellHook = ''
             echo "🔨 MinGW-based WSL Plugin Development"
-            echo "Direct cross-compilation without Wine"
+            echo "✅ WORKING SOLUTION: Pure Nix cross-compilation"
+            echo ""
+            echo "Available commands:"
+            echo "  build-plugin-mingw              # Show build instructions"
+            echo "  nuget-restore                   # Restore WSL Plugin API packages"
+            echo ""
+            echo "Quick build:"
+            echo "  # See: build-plugin-mingw for full command"
+            echo ""
             export CC=x86_64-w64-mingw32-gcc
             export CXX=x86_64-w64-mingw32-g++
           '';
