@@ -2,7 +2,7 @@
 # Single source of truth for build, test, and development processes
 
 .PHONY: help plugin install test clean
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := plugin
 
 # Configuration
 PLUGIN_NAME = plugin.dll
@@ -24,9 +24,9 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Development workflow:"
-	@echo "  1. make plugin    # Build the WSL plugin"
+	@echo "  1. make           # Build the WSL plugin (default)"
 	@echo "  2. make test      # Run automated tests"
-	@echo "  3. make install   # Prepare for deployment"
+	@echo "  3. make install   # Install and register plugin"
 	@echo "  4. make clean     # Clean build artifacts"
 	@echo ""
 	@echo "✅ MinGW cross-compilation environment active"
@@ -51,16 +51,15 @@ $(PACKAGES_DIR)/.restored: packages.config ## Restore NuGet packages
 	@touch $(PACKAGES_DIR)/.restored
 	@echo "✅ NuGet packages restored"
 
-install: $(PLUGIN_NAME) ## Prepare plugin for installation
-	@echo "📋 Plugin ready for installation:"
+install: $(PLUGIN_NAME) ## Install and register WSL plugin
+	@echo "🚀 Installing WSL Plugin..."
+	@echo "📋 Plugin info:"
 	@echo "  File: $(PLUGIN_NAME)"
 	@echo "  Size: $$(stat -c%s $(PLUGIN_NAME)) bytes"
 	@echo "  Type: $$(file $(PLUGIN_NAME))"
 	@echo ""
-	@echo "🚀 To install in WSL:"
-	@echo "  1. Copy $(PLUGIN_NAME) to Windows WSL plugin directory"
-	@echo "  2. Register plugin with WSL service"
-	@echo "  3. Restart WSL to load plugin"
+	@echo "🔐 Running PowerShell installation script..."
+	powershell.exe -ExecutionPolicy Bypass -File "./install-wsl-plugin.ps1" -PluginPath "$$(pwd)/$(PLUGIN_NAME)"
 	@echo ""
 	@echo "📝 Plugin log output will be in: C:\\wsl-plugin-demo.txt"
 
