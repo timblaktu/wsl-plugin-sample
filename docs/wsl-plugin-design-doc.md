@@ -39,41 +39,50 @@ Because:
 - _**9P (nor any) systemd service cannot exist during `systemd-shim`'s lifetime**_
 
 ```mermaid
-%%{init: {'theme':'base', 'themeVariables': {
-  'signalColor':'#888888',
-}}}%%
 sequenceDiagram
-    actor User
-    participant WSLService
-    participant WSLPlugin
+    actor Windows User
+    participant WSL Service
+    participant WSL Plugin
 
-    User->>+WSLService: wsl.exe -d NixOS
+    Windows User->>+WSL Service: wsl.exe -d NixOS
     create participant NixOS
-    WSLService->>+NixOS: Start VM
+    WSL Service->>NixOS: Start VM
+    NixOS->>NixOS: load + boot kernel
+    NixOS->>NixOS: extract initramfs
+    NixOS->>NixOS: mount /{,dev,proc,sys}
     
-    WSLService->>+WSLPlugin: OnVMStarted()
-    WSLPlugin-->>-WSLService: Return S_OK
+    WSL Service->>+WSL Plugin: OnVMStarted()
+    WSL Plugin-->>-WSL Service: Return S_OK
     
-    create participant SystemdShim
-    NixOS->>+SystemdShim: Launch init
-    SystemdShim->>SystemdShim: performs setup
-    activate WSLService
-    WSLService->>+WSLPlugin: OnDistributionStarted()
-    Note right of WSLPlugin: \\wsl$\NixOS<br/>Inaccessible bc<br/>9P not running
+    create participant systemd-shim
+    NixOS->>systemd-shim: /sbin/init
+    systemd-shim->>systemd-shim: performs setup
+    activate WSL Service
+    WSL Service->>+WSL Plugin: OnDistributionStarted()
+    Note left of WSL Plugin: \\wsl$\NixOS<br/>Inaccessible bc<br/>9P not running
     
-    WSLPlugin-->>-WSLService: Return S_OK
+    WSL Plugin-->>-WSL Service: Return S_OK
     
-    Note right of SystemdShim: exec systemd
-    Note over SystemdShim: systemd<br/>(still PID 1)
+    systemd-shim->>systemd-shim: exec systemd
+    Note over systemd-shim: systemd<br/>(still PID 1)
     
     create participant 9PServer
-    SystemdShim->>+9PServer: Start 9P server
+    systemd-shim->>9PServer: Start 9P server
     9PServer->>9PServer: Bind to hvsocket
-    9PServer-->>WSLService: 9P filesystem available
-    Note left of 9PServer: \\wsl$ now<br/>accessible
-    deactivate 9PServer
-    deactivate NixOS
-    deactivate SystemdShim
+    9PServer-->>WSL Service: 9P filesystem available
+    Note left of 9PServer: \\wsl$ now accessible
+    
+    box rgba(33,66,99,0.5) Windows Host
+    actor Windows User
+    participant WSL Service
+    participant WSL Plugin
+    end
+    
+    box rgba(22,55,88,0.5) WSL Hyper-V VM
+    participant NixOS
+    participant systemd-shim
+    participant 9PServer
+    end
 ```
 
 ### Diagram 2: VSOCK-Based Solution (Successful Connection)
