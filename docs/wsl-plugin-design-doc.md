@@ -28,39 +28,52 @@ Building a WSL plugin for NixOS-WSL that accomplishes the following objectives:
 
 ## Sequence Timing Diagrams
 
-### Diagram 1: Race Condition with 9P Server (Why Direct Access Fails)
+### Diagram 1: Why WSL Plugin Cannot Directly Access VM Rootfs
+
+Because:
+- Filesystem interop is provided by the 9p server
+- 9P server runs as systemd service in the VM
+- NixOS-WSL declares `systemd-shim` as its "init" process (PID=1) to WSL
+- `systemd-shim` ensures NixOS-WSL distro requirements are met, then `exec systemd`
+- Plugin-`systemd-shim` interaction must complete before `systemd-shim` execs systemd
+- _**9P (nor any) systemd service cannot exist during `systemd-shim`'s lifetime**_
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {
+  'signalColor':'#888888',
+}}}%%
 sequenceDiagram
-    participant U as Windows User
-    participant W as WSL Service
-    participant I as Init Process<br/>(systemd-shim)
-    participant N as 9P Server<br/>(plan9)
-    participant P as Plugin DLL
+    actor User
+    participant WSLService
+    participant WSLPlugin
 
-    U->>W: wsl -d NixOS
-    W->>I: Launch init
-    Note over I: t=0ms<br/>Process starts
+    User->>+WSLService: wsl.exe -d NixOS
+    create participant NixOS
+    WSLService->>+NixOS: Start VM
     
-    W->>P: OnDistributionStarted()
-    activate P
-    Note over P: Attempts to access<br/>\\wsl$\NixOS\etc
-    P--xP: Path not found!
-    Note over P: ❌ FAILS<br/>9P not ready
-    deactivate P
+    WSLService->>+WSLPlugin: OnVMStarted()
+    WSLPlugin-->>-WSLService: Return S_OK
     
-    Note over I: t=5-50ms<br/>(variable delay)
-    I->>N: Start 9P server
-    activate N
-    N->>N: Bind to hvsocket
-    N-->>I: Ready signal
-    I-->>W: 9P filesystem available
-    Note over N: \\wsl$ now<br/>accessible
-    deactivate N
+    create participant SystemdShim
+    NixOS->>+SystemdShim: Launch init
+    SystemdShim->>SystemdShim: performs setup
+    activate WSLService
+    WSLService->>+WSLPlugin: OnDistributionStarted()
+    Note right of WSLPlugin: \\wsl$\NixOS<br/>Inaccessible bc<br/>9P not running
     
-    rect rgb(255, 230, 230)
-        Note over P,N: TIMING GAP<br/>Plugin callback executes BEFORE 9P server starts<br/>Direct filesystem access unreliable
-    end
+    WSLPlugin-->>-WSLService: Return S_OK
+    
+    Note right of SystemdShim: exec systemd
+    Note over SystemdShim: systemd<br/>(still PID 1)
+    
+    create participant 9PServer
+    SystemdShim->>+9PServer: Start 9P server
+    9PServer->>9PServer: Bind to hvsocket
+    9PServer-->>WSLService: 9P filesystem available
+    Note left of 9PServer: \\wsl$ now<br/>accessible
+    deactivate 9PServer
+    deactivate NixOS
+    deactivate SystemdShim
 ```
 
 ### Diagram 2: VSOCK-Based Solution (Successful Connection)

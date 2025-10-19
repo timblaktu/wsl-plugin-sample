@@ -14,7 +14,7 @@ TEMP_DIR = temp_include
 CXX = x86_64-w64-mingw32-g++
 CXXFLAGS = -std=c++14 -shared
 INCLUDES = -I$(TEMP_DIR) -I$(PACKAGES_DIR)/Microsoft.WSL.PluginApi.2.1.3/build/native/include
-LIBS = -lws2_32 -lkernel32 -luser32
+LIBS = -lws2_32 -lkernel32 -luser32 -lole32 -loleaut32 -lwbemuuid
 
 help: ## Show this help message
 	@echo "🔧 WSL Plugin Development Makefile"

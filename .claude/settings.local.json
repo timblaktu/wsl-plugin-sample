@@ -1,9 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Read(//home/tim/src/nixpkgs/nixos/lib/test-driver/src/**)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/home/tim/src/NixOS-WSL"
+    ]
   }
 }

@@ -1,7 +1,10 @@
-import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
+import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: 
+let
+  machineName = "m0";
+in {
   name = "wsl-plugin-test";
 
-  nodes.machine = { config, pkgs, lib, ... }: {
+  nodes.${machineName} = { config, pkgs, lib, ... }: {
     # Basic NixOS configuration for testing
     system.stateVersion = "24.05";
     
@@ -86,32 +89,32 @@ import <nixpkgs/nixos/tests/make-test-python.nix> ({ pkgs, ... }: {
   };
 
   testScript = ''
-machine.start()
-machine.wait_for_unit("multi-user.target")
+${machineName}.start()
+${machineName}.wait_for_unit("multi-user.target")
 
 # Test basic system functionality
 print("Testing basic system commands...")
-machine.succeed("hostname")
-machine.succeed("cat /proc/version")
+${machineName}.succeed("hostname")
+${machineName}.succeed("cat /proc/version")
 
 # Test plugin file presence
 print("Testing plugin file...")
-machine.succeed("test -f /etc/wsl-plugin-test/plugin.dll")
+${machineName}.succeed("test -f /etc/wsl-plugin-test/plugin.dll")
 
 # Validate line endings in test script
 print("Validating line endings in test script...")
-machine.succeed("file /etc/wsl-plugin-test/test-plugin-functionality.sh | grep -v CRLF")
+${machineName}.succeed("file /etc/wsl-plugin-test/test-plugin-functionality.sh | grep -v CRLF")
 
 # Run our comprehensive test script
 print("Running WSL plugin functionality tests...")
-result = machine.succeed("/etc/wsl-plugin-test/test-plugin-functionality.sh")
+result = ${machineName}.succeed("/etc/wsl-plugin-test/test-plugin-functionality.sh")
 print("Test output:")
 print(result)
 
 # Verify custom strings are present in plugin
 print("Verifying custom modifications...")
-machine.succeed("strings /etc/wsl-plugin-test/plugin.dll | grep 'CUSTOM WSL PLUGIN'")
-machine.succeed("strings /etc/wsl-plugin-test/plugin.dll | grep 'NixOS-WSL'")
+${machineName}.succeed("strings /etc/wsl-plugin-test/plugin.dll | grep 'CUSTOM WSL PLUGIN'")
+${machineName}.succeed("strings /etc/wsl-plugin-test/plugin.dll | grep 'NixOS-WSL'")
 
 print("All tests passed!")
   '';
