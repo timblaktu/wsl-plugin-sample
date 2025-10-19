@@ -46,7 +46,7 @@ sequenceDiagram
 
     Windows User->>+WSL Service: wsl.exe -d NixOS
     create participant NixOS
-    WSL Service->>NixOS: Start VM
+    WSL Service-)NixOS: Start VM
     NixOS->>NixOS: load + boot kernel
     NixOS->>NixOS: extract initramfs
     NixOS->>NixOS: mount /{,dev,proc,sys}
@@ -55,7 +55,7 @@ sequenceDiagram
     WSL Plugin-->>-WSL Service: Return S_OK
     
     create participant systemd-shim
-    NixOS->>systemd-shim: /sbin/init
+    NixOS-)systemd-shim: /sbin/init
     systemd-shim->>systemd-shim: performs setup
     activate WSL Service
     WSL Service->>+WSL Plugin: OnDistributionStarted()
@@ -67,7 +67,7 @@ sequenceDiagram
     Note over systemd-shim: systemd<br/>(still PID 1)
     
     create participant 9PServer
-    systemd-shim->>9PServer: Start 9P server
+    systemd-shim-)9PServer: Start 9P server
     9PServer->>9PServer: Bind to hvsocket
     9PServer-->>WSL Service: 9P filesystem available
     Note left of 9PServer: \\wsl$ now accessible
@@ -89,48 +89,59 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant U as Windows User
-    participant W as WSL Service
-    participant I as Init Process<br/>(systemd-shim)
-    participant M as WMI Service
-    participant P as Plugin DLL
+    actor Windows User
+    participant WSL Service
+    participant WMI Service
+    participant WSL Plugin
+    participant systemd-shim
 
-    U->>W: wsl -d NixOS
-    W->>I: Launch init
-    activate I
-    I->>I: Read /etc/nixos-<br/>wsl-plugin.ini
-    I->>I: Create VSOCK<br/>listener on<br/>port 5001
-    deactivate I
+    Windows User->>WSL Service: wsl -d NixOS
+    WSL Service->>systemd-shim: Launch init
+    activate systemd-shim
+    systemd-shim->>systemd-shim: Read /etc/nixos-<br/>wsl-plugin.ini
+    systemd-shim->>systemd-shim: Create VSOCK<br/>listener on<br/>port 5001
+    deactivate systemd-shim
     
-    W->>P: OnDistributionStarted("NixOS", PID)
-    activate P
-    P->>M: Query VM GUID<br/>for "NixOS"
-    M-->>P: VM GUID
-    P->>P: Create AF_HYPERV<br/>socket
+    WSL Service->>WSL Plugin: OnDistributionStarted("NixOS", PID)
+    activate WSL Plugin
+    WSL Plugin->>WMI Service: Query VM GUID<br/>for "NixOS"
+    WMI Service-->>WSL Plugin: VM GUID
+    WSL Plugin->>WSL Plugin: Create AF_HYPERV<br/>socket
     
-    P->>I: VSOCK Connect<br/>(port 5001)<br/>t=0ms
-    activate I
-    I->>I: Accept<br/>connection
-    I-->>P: Connected<br/>t=5-10ms
-    deactivate I
+    WSL Plugin->>systemd-shim: VSOCK Connect<br/>(port 5001)<br/>t=0ms
+    activate systemd-shim
+    systemd-shim->>systemd-shim: Accept<br/>connection
+    systemd-shim-->>WSL Plugin: Connected<br/>t=5-10ms
+    deactivate systemd-shim
     
-    I->>P: Send INI content<br/>t=10-15ms
-    activate P
-    P->>P: Parse INI<br/>Validate disks<br/>t=15-25ms
-    P-->>I: Send STATUS<br/>"STATUS ready"<br/>t=25-30ms
-    deactivate P
+    systemd-shim->>WSL Plugin: Send INI content<br/>t=10-15ms
+    activate WSL Plugin
+    WSL Plugin->>WSL Plugin: Parse INI<br/>Validate disks<br/>t=15-25ms
+    WSL Plugin-->>systemd-shim: Send STATUS<br/>"STATUS ready"<br/>t=25-30ms
+    deactivate WSL Plugin
     
-    I->>I: Close VSOCK
-    P-->>W: Return S_OK
-    deactivate P
+    systemd-shim->>systemd-shim: Close VSOCK
+    WSL Plugin-->>WSL Service: Return S_OK
+    deactivate WSL Plugin
     
-    W->>I: Continue init
-    activate I
-    I->>I: Mount Nix store<br/>Exec systemd
-    deactivate I
+    WSL Service->>systemd-shim: Continue init
+    activate systemd-shim
+    systemd-shim->>systemd-shim: Mount Nix store<br/>Exec systemd
+    deactivate systemd-shim
     
     rect rgb(230, 255, 230)
-        Note over P,I: TOTAL TIME: ~30ms<br/>No dependency on 9P server availability
+        Note over WSL Plugin,systemd-shim: TOTAL TIME: ~30ms<br/>No dependency on 9P server availability
+    end
+    
+    box rgba(33,66,99,0.5) Windows Host
+    actor Windows User
+    participant WSL Service
+    participant WMI Service
+    participant WSL Plugin
+    end
+    
+    box rgba(22,55,88,0.5) WSL Hyper-V VM
+    participant systemd-shim
     end
 ```
 
@@ -138,31 +149,40 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant S as Guest Shim<br/>(AF_VSOCK)
-    participant H as Windows Host<br/>(AF_HYPERV)
-    participant P as Plugin DLL
+    participant systemd-shim as Guest Shim<br/>(AF_VSOCK)
+    participant Windows Host as Windows Host<br/>(AF_HYPERV)
+    participant WSL Plugin
 
-    S->>S: bind(5001)
-    S->>S: listen()
-    S->>S: accept()<br/>(5s timeout)
+    systemd-shim->>systemd-shim: bind(5001)
+    systemd-shim->>systemd-shim: listen()
+    systemd-shim->>systemd-shim: accept()<br/>(5s timeout)
     
-    Note over P: Attempt 1<br/>t=0ms
-    P->>H: connect()
-    H--xS: Connection refused
-    H-->>P: ECONNREFUSED
+    Note over WSL Plugin: Attempt 1<br/>t=0ms
+    WSL Plugin->>Windows Host: connect()
+    Windows Host--xsystemd-shim: Connection refused
+    Windows Host-->>WSL Plugin: ECONNREFUSED
     
-    P->>P: Sleep(100ms)
+    WSL Plugin->>WSL Plugin: Sleep(100ms)
     
-    Note over P: Attempt 2<br/>t=100ms
-    P->>H: connect()
-    H->>S: SYN
-    S-->>H: SYN-ACK
-    H->>P: ACK
+    Note over WSL Plugin: Attempt 2<br/>t=100ms
+    WSL Plugin->>Windows Host: connect()
+    Windows Host->>systemd-shim: SYN
+    systemd-shim-->>Windows Host: SYN-ACK
+    Windows Host->>WSL Plugin: ACK
     
-    S-->>P: Connection established
+    systemd-shim-->>WSL Plugin: Connection established
     
     rect rgb(240, 240, 255)
-        Note over S,P: Connection Retry Pattern<br/>Plugin retries up to 3 times with 100ms delay<br/>Handles transient timing misalignments
+        Note over systemd-shim,WSL Plugin: Connection Retry Pattern<br/>Plugin retries up to 3 times with 100ms delay<br/>Handles transient timing misalignments
+    end
+    
+    box rgba(33,66,99,0.5) Windows Host
+    participant Windows Host
+    participant WSL Plugin
+    end
+    
+    box rgba(22,55,88,0.5) WSL Hyper-V VM
+    participant systemd-shim
     end
 ```
 
@@ -170,86 +190,106 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant S as Guest Shim
-    participant P as Plugin
-    participant D as Windows Disk<br/>Management
-    participant T as Task<br/>Scheduler
-    participant W as WSL Service
+    participant systemd-shim
+    participant WSL Plugin
+    participant Windows Disk Management as Windows Disk<br/>Management
+    participant Task Scheduler as Task<br/>Scheduler
+    participant WSL Service
 
-    S->>P: Send INI config
-    activate P
-    P->>P: Parse:<br/>- bare_disk_1<br/>- vhdx_1
+    systemd-shim->>WSL Plugin: Send INI config
+    activate WSL Plugin
+    WSL Plugin->>WSL Plugin: Parse:<br/>- bare_disk_1<br/>- vhdx_1
     
-    P->>D: Query disk by UUID
-    D-->>P: ❌ Not found
+    WSL Plugin->>Windows Disk Management: Query disk by UUID
+    Windows Disk Management-->>WSL Plugin: ❌ Not found
     
-    P->>D: Check VHDX exists
-    D-->>P: ✓ File exists
+    WSL Plugin->>Windows Disk Management: Check VHDX exists
+    Windows Disk Management-->>WSL Plugin: ✓ File exists
     
-    P->>D: Check if attached
-    D-->>P: ❌ Not attached
+    WSL Plugin->>Windows Disk Management: Check if attached
+    Windows Disk Management-->>WSL Plugin: ❌ Not attached
     
-    P->>P: Validation failed:<br/>- Missing disk<br/>- VHDX unmounted
+    WSL Plugin->>WSL Plugin: Validation failed:<br/>- Missing disk<br/>- VHDX unmounted
     
-    P->>T: Create mount task
-    activate T
-    T->>T: Task:<br/>1. wsl --mount<br/>2. Attach VHDX<br/>3. wsl -d NixOS
-    deactivate T
+    WSL Plugin->>Task Scheduler: Create mount task
+    activate Task Scheduler
+    Task Scheduler->>Task Scheduler: Task:<br/>1. wsl --mount<br/>2. Attach VHDX<br/>3. wsl -d NixOS
+    deactivate Task Scheduler
     
-    P-->>S: "STATUS notReady"<br/>"MESSAGE ..."
-    deactivate P
+    WSL Plugin-->>systemd-shim: "STATUS notReady"<br/>"MESSAGE ..."
+    deactivate WSL Plugin
     
-    P-->>W: Return E_FAIL
-    S->>S: Exit(1)
-    W->>W: Abort startup
+    WSL Plugin-->>WSL Service: Return E_FAIL
+    systemd-shim->>systemd-shim: Exit(1)
+    WSL Service->>WSL Service: Abort startup
     
     rect rgb(255, 255, 230)
-        Note over S,W: Later, after user mounts disk
+        Note over systemd-shim,WSL Service: Later, after user mounts disk
     end
     
-    W->>T: Trigger task
-    T->>D: Mount disk
-    T->>D: Attach VHDX
-    T->>W: wsl -d NixOS
-    Note over W: Restart flow
+    WSL Service->>Task Scheduler: Trigger task
+    Task Scheduler->>Windows Disk Management: Mount disk
+    Task Scheduler->>Windows Disk Management: Attach VHDX
+    Task Scheduler->>WSL Service: wsl -d NixOS
+    Note over WSL Service: Restart flow
+    
+    box rgba(33,66,99,0.5) Windows Host
+    participant WSL Plugin
+    participant Windows Disk Management
+    participant Task Scheduler
+    participant WSL Service
+    end
+    
+    box rgba(22,55,88,0.5) WSL Hyper-V VM
+    participant systemd-shim
+    end
 ```
 
 ### Diagram 5: Distribution Detection Through VSOCK Connection
 
 ```mermaid
 sequenceDiagram
-    participant U as Ubuntu Dist<br/>(No VSOCK srv)
-    participant N as NixOS Dist<br/>(VSOCK server)
-    participant P as Plugin DLL
+    participant Ubuntu as Ubuntu Dist<br/>(No VSOCK srv)
+    participant NixOS as NixOS Dist<br/>(VSOCK server)
+    participant WSL Plugin
 
-    Note over N: Read INI config
-    N->>N: bind(5001)<br/>listen()
+    Note over NixOS: Read INI config
+    NixOS->>NixOS: bind(5001)<br/>listen()
     
     rect rgb(255, 240, 240)
-        Note over P: OnDistributionStarted("Ubuntu")
+        Note over WSL Plugin: OnDistributionStarted("Ubuntu")
         
         loop Connection Attempts
-            P->>U: connect()<br/>Attempt 1-3
-            U-->>P: ECONNREFUSED<br/>No listener
-            P->>P: Sleep(100ms)
+            WSL Plugin->>Ubuntu: connect()<br/>Attempt 1-3
+            Ubuntu-->>WSL Plugin: ECONNREFUSED<br/>No listener
+            WSL Plugin->>WSL Plugin: Sleep(100ms)
         end
         
-        P->>P: All attempts failed<br/>Return S_OK<br/>(Skip Ubuntu)
+        WSL Plugin->>WSL Plugin: All attempts failed<br/>Return S_OK<br/>(Skip Ubuntu)
     end
     
     rect rgb(240, 255, 240)
-        Note over P: OnDistributionStarted("NixOS")
+        Note over WSL Plugin: OnDistributionStarted("NixOS")
         
-        P->>N: connect()<br/>Attempt 1
-        N->>N: Accept connection
-        N-->>P: SUCCESS
+        WSL Plugin->>NixOS: connect()<br/>Attempt 1
+        NixOS->>NixOS: Accept connection
+        NixOS-->>WSL Plugin: SUCCESS
         
-        N<->P: Protocol exchange
-        P->>P: Process<br/>requirements
+        NixOS<->WSL Plugin: Protocol exchange
+        WSL Plugin->>WSL Plugin: Process<br/>requirements
     end
     
     rect rgb(240, 240, 255)
-        Note over U,P: Selective Activation Pattern<br/>Plugin only processes distributions with VSOCK listener<br/>Connection attempt serves as detection
+        Note over Ubuntu,WSL Plugin: Selective Activation Pattern<br/>Plugin only processes distributions with VSOCK listener<br/>Connection attempt serves as detection
+    end
+    
+    box rgba(33,66,99,0.5) Windows Host
+    participant WSL Plugin
+    end
+    
+    box rgba(22,55,88,0.5) WSL Hyper-V VMs
+    participant Ubuntu
+    participant NixOS
     end
 ```
 
@@ -275,17 +315,23 @@ flowchart TB
         FS[Distribution Filesystem<br/>Created]
         
         subgraph Runtime["Runtime Components"]
-            WSL[WSL Service]
+            HCS[Host Compute System<br/>Service]
+            WSL[WSL Service<br/>(wslservice.exe)]
             Plugin[WSL Plugin DLL]
+            MiniInit[mini_init<br/>Early Configuration]
             Shim[systemd-shim<br/>/bin/systemd-shim]
             WMI[WMI Service]
             VSOCK[VSOCK Connection<br/>Port 5001]
+            GNS[gns<br/>Network Config]
         end
         
         Import --> FS
-        FS --> WSL
+        FS --> HCS
+        HCS --> WSL
         WSL --> Plugin
-        WSL --> Shim
+        WSL --> MiniInit
+        MiniInit --> Shim
+        MiniInit --> GNS
         Plugin --> WMI
         Plugin -.->|AF_HYPERV| VSOCK
         Shim -.->|AF_VSOCK| VSOCK
@@ -298,9 +344,49 @@ flowchart TB
     style VSOCK fill:#f3e5f5
     style Plugin fill:#ffe0b2
     style Shim fill:#e8f5e9
+    style MiniInit fill:#ffecb3
+    style HCS fill:#c5e1a5
 ```
 
 ---
+
+## Early Boot Process: mini_init and HCS
+
+### The mini_init Stage
+
+Before the distribution init process starts, WSL2 runs a special `mini_init` process that handles early configuration tasks:
+
+**mini_init responsibilities:**
+- Receives early configuration messages from the Windows host
+- Creates the network configuration process (`gns`) for network setup
+- Handles system VHD mounting (the distribution's root filesystem)
+- Manages memory reclaim settings
+- Seeds entropy for the Linux kernel
+- Prepares the environment for the distribution's init process
+
+This stage occurs AFTER the VM kernel boots but BEFORE the distribution namespace is created. Understanding this timing is crucial for plugin development.
+
+### Host Compute System (HCS) Service
+
+The Host Compute System service is the Windows component that actually manages Hyper-V lightweight VMs for WSL2:
+
+**HCS role in WSL2:**
+- Creates and manages the Hyper-V VM through COM interfaces
+- Handles resource allocation (CPU, memory, GPU)
+- Manages VM lifecycle (start, stop, pause)
+- Provides the abstraction layer between WSL service and Hyper-V
+
+The WSL service (`wslservice.exe`) communicates with HCS to create and manage VMs, rather than interacting with Hyper-V directly.
+
+### Network Configuration Process (gns)
+
+The `gns` process is created during the mini_init stage and handles:
+- Network interface configuration
+- IP address assignment
+- DNS configuration
+- Network namespace setup
+
+This process is relevant for scenarios involving network shares, as it ensures network connectivity is established before the distribution starts.
 
 ## Critical Research Finding: The 9P Server Timing Issue
 
@@ -584,6 +670,8 @@ This protocol is intentionally simple to minimize parsing complexity and potenti
 ### Service GUID Registration
 
 For VSOCK communication to work, the Windows host must register the Service GUID in the Hyper-V Guest Communication Services registry. This registration must occur during plugin installation.
+
+**Important Note:** The plugin uses COM interfaces indirectly through the WSL Plugin API. Direct COM interface usage would provide additional capabilities but requires more complex build configuration than MinGW supports.
 
 **Registry Location:**
 ```

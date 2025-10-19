@@ -119,24 +119,28 @@ Hyper-V VM allocated
 
 ### Phase 4: VM Initialization
 
-**Timeline:**
+The VM creation is managed by the Host Compute System (HCS) service, which provides the abstraction layer between WSL and Hyper-V:
 
 ```
-T+0ms:   wslhost.exe process created
-T+50ms:  Hyper-V VM allocated (memory, CPU)
-T+100ms: Custom Linux kernel loaded into VM memory
-T+150ms: Kernel boot parameters set
-T+200ms: VM execution begins
-T+250ms: Linux kernel decompresses and starts
-T+300ms: Initramfs extracted
-T+350ms: Early kernel initialization
-T+400ms: Plugin: OnVMStarted() hook called ← SYNCHRONIZATION POINT #1
+wslservice.exe → HCS Service → Hyper-V VM
 ```
+
+**Boot Sequence:**
+1. wslhost.exe process created
+2. HCS allocates Hyper-V VM (memory, CPU, GPU)
+3. Custom Linux kernel loaded into VM memory
+4. Kernel boot parameters set
+5. VM execution begins
+6. Linux kernel decompresses and starts
+7. Initramfs extracted
+8. Early kernel initialization
+9. Plugin: OnVMStarted() hook called ← SYNCHRONIZATION POINT #1
 
 **Critical**: At this point:
 - ✅ VM process exists and is running
 - ✅ Linux kernel is loaded and executing
 - ✅ Initramfs is mounted as root
+- ❌ No mini_init has run yet
 - ❌ No distribution has started yet
 - ❌ No PID 1 init process yet
 
@@ -185,7 +189,29 @@ The initramfs provides a minimal Linux environment:
 - Mount the actual distribution root filesystem
 - Execute the distribution's init system
 
-### Phase 3: Root Namespace vs Distribution Namespace
+### Phase 3: mini_init Stage
+
+After the kernel boots but before the distribution starts, WSL2 runs the `mini_init` process:
+
+**mini_init responsibilities:**
+- Receives early configuration messages from Windows host
+- Creates network configuration process (`gns`)
+- Handles system VHD mounting (the distribution's root filesystem)
+- Configures hostname
+- Manages memory reclaim settings
+- Seeds entropy for cryptographic operations
+- Prepares environment for distribution launch
+
+**Network Configuration (gns):**
+The `gns` process created by mini_init handles:
+- Network interface configuration
+- IP address assignment (both IPv4 and IPv6)
+- DNS resolver configuration
+- Network namespace setup for distribution isolation
+
+This ensures network connectivity is ready before the distribution starts, which is crucial for features like network share mounting.
+
+### Phase 4: Root Namespace vs Distribution Namespace
 
 WSL2 maintains multiple namespaces:
 
@@ -216,7 +242,7 @@ Root Namespace (PID namespace)
       └── PID 1: /nix/store/.../systemd-shim
 ```
 
-### Phase 4: Distribution Init Process
+### Phase 5: Distribution Init Process
 
 **Standard Distribution Boot:**
 
@@ -241,7 +267,7 @@ On Linux, **PID 1 is special**:
 - systemd **refuses** to run unless it is PID 1
 - This creates problems for non-native init systems (see NixOS case study)
 
-### Phase 5: /etc/wsl.conf Processing
+### Phase 6: /etc/wsl.conf Processing
 
 WSL reads `/etc/wsl.conf` from the distribution to configure behavior:
 
@@ -2364,11 +2390,12 @@ TIME | WINDOWS SIDE                    | LINUX SIDE                  | PLUGIN HO
 T+0  | User: wsl.exe -d NixOS        |                            |
      | wsl.exe → wslservice IPC      |                            |
      |                               |                            |
-T+1  | Plugin DLL loaded             |                            | ★ ENTRY POINT
+T+1  | HCS Service invoked           |                            |
+     | Plugin DLL loaded             |                            | ★ ENTRY POINT
      | WSLPLUGINAPI_ENTRYPOINTV1()   |                            |
      |                               |                            |
 T+2  | wslhost.exe spawned           |                            |
-     | Hyper-V VM allocated          |                            |
+     | HCS allocates Hyper-V VM      |                            |
      |                               |                            |
 T+3  | Kernel loaded into VM memory  | Kernel decompresses        |
      |                               | start_kernel()             |
@@ -2384,13 +2411,19 @@ T+5  | ★ BLOCKING WAIT ★             |                            | ★ OnVM
 T+6  | OnVMStarted() returned S_OK   |                            |
      | Continue boot process         |                            |
      |                               |                            |
-T+7  | Mount distribution rootfs     | Rootfs mounted             |
+T+7  |                               | mini_init starts:          |
+     |                               | - Receives config messages |
+     |                               | - Creates gns process      |
+     |                               | - Mounts system VHD        |
+     |                               | - Seeds entropy            |
+     |                               |                            |
+T+8  | Mount distribution rootfs     | Rootfs mounted             |
      | Create distribution namespace | PID namespace created      |
      |                               |                            |
-T+8  | Spawn init process            | PID 1: /sbin/init starts   |
+T+9  | Spawn init process            | PID 1: /sbin/init starts   |
      |                               | (systemd-shim)             |
      |                               |                            |
-T+9  | ★ BLOCKING WAIT ★             | [Init process running      | ★ OnDistribution-
+T+10 | ★ BLOCKING WAIT ★             | [Init process running      | ★ OnDistribution-
      | [WSL waits for return]        |  but waiting]              |    Started()
      |                               |                            | [Read NixOS config]
      |                               |                            | [Create VHDXs]
@@ -2399,21 +2432,21 @@ T+9  | ★ BLOCKING WAIT ★             | [Init process running      | ★ OnDi
      |                               |                            | [Configure firewall]
      |                               |                            | [Return S_OK]
      |                               |                            |
-T+10 | OnDistributionStarted() OK    |                            |
+T+11 | OnDistributionStarted() OK    |                            |
      | VHDXs now attached to WSL     |                            |
      |                               |                            |
-T+11 |                               | systemd-shim activation:   |
+T+12 |                               | systemd-shim activation:   |
      |                               |   1. Run activate scripts  |
      |                               |   2. FHS symlinks          |
      |                               |   3. Mount VHDXs (fstab)   |
      |                               |   4. exec(systemd)         |
      |                               |                            |
-T+12 |                               | systemd takes over (PID 1) |
+T+13 |                               | systemd takes over (PID 1) |
      |                               | systemd-journald           |
      |                               | systemd-logind             |
      |                               | Mount /mnt/data (VHDX)     |
      |                               |                            |
-T+13 | User gets shell prompt        | User shell spawned         |
+T+14 | User gets shell prompt        | User shell spawned         |
      |                               | All mounts ready           |
      |                               | /mnt/data available        |
 ```

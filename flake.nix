@@ -737,20 +737,23 @@ echo "    process management failures that caused 30+ minute hangs!"
           # WSL Plugin Development Makefile
           # Single source of truth for build, test, and development processes
           
-          .PHONY: help plugin install test clean
+          .PHONY: help plugin install test clean plugin-windows plugin-mingw
           .DEFAULT_GOAL := help
           
           # Configuration
           PLUGIN_NAME = plugin.dll
           PLUGIN_SOURCE = plugin.cpp
-          PACKAGES_DIR = packages
-          TEMP_DIR = temp_include
           
-          # MinGW Compiler Configuration
-          CXX = x86_64-w64-mingw32-g++
-          CXXFLAGS = -std=c++14 -shared
-          INCLUDES = -I$(TEMP_DIR) -I$(PACKAGES_DIR)/Microsoft.WSL.PluginApi.2.1.3/build/native/include
-          LIBS = -lws2_32 -lkernel32 -luser32
+          # Detect environment and set default build method
+          ifeq ($(shell command -v build-windows-plugin 2>/dev/null),)
+              # MinGW environment
+              BUILD_METHOD := mingw
+              ENVIRONMENT := MinGW cross-compilation
+          else
+              # Windows container environment  
+              BUILD_METHOD := windows
+              ENVIRONMENT := Windows Container (full SDK)
+          endif
           
           help: ## Show this help message
           	@echo "🔧 WSL Plugin Development Makefile"
@@ -760,31 +763,54 @@ echo "    process management failures that caused 30+ minute hangs!"
           	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-10s %s\n", $$1, $$2}'
           	@echo ""
           	@echo "Development workflow:"
-          	@echo "  1. make plugin    # Build the WSL plugin"
+          	@echo "  1. make plugin    # Build the WSL plugin (auto-detect method)"
           	@echo "  2. make test      # Run automated tests"
           	@echo "  3. make install   # Prepare for deployment"
           	@echo "  4. make clean     # Clean build artifacts"
           	@echo ""
-          	@echo "✅ MinGW cross-compilation environment active"
+          	@echo "Build methods:"
+          	@echo "  plugin-windows    # Build with Windows Container (full SDK APIs)"
+          	@echo "  plugin-mingw      # Build with MinGW (limited APIs)"
+          	@echo ""
+          	@echo "Active environment: $(ENVIRONMENT)"
+          	@echo "Default build method: $(BUILD_METHOD)"
           	@echo "📁 Output: $(PLUGIN_NAME)"
           
-          plugin: $(PLUGIN_NAME) ## Build the WSL plugin DLL
+          plugin: ## Build the WSL plugin DLL (auto-detect method)
+          ifeq ($(BUILD_METHOD),windows)
+          	@$(MAKE) plugin-windows
+          else
+          	@$(MAKE) plugin-mingw
+          endif
           
-          $(PLUGIN_NAME): $(PLUGIN_SOURCE) $(PACKAGES_DIR)/.restored
-          	@echo "🔨 Building WSL Plugin with MinGW..."
-          	@mkdir -p $(TEMP_DIR)
-          	@echo '#include <windows.h>' > $(TEMP_DIR)/Windows.h
-          	$(CXX) $(CXXFLAGS) $(INCLUDES) -o $(PLUGIN_NAME) $(PLUGIN_SOURCE) $(LIBS)
-          	@rm -rf $(TEMP_DIR)
-          	@echo "✅ Plugin built successfully: $(PLUGIN_NAME)"
+          plugin-windows: ## Build with Windows Container (full Windows SDK APIs)
+          	@echo "🐳 Building WSL Plugin with Windows Container (full SDK APIs)..."
+          	@command -v build-windows-plugin >/dev/null || (echo "❌ build-windows-plugin not found. Use 'nix develop' (default shell)" && exit 1)
+          	build-windows-plugin
+          	@echo "✅ Plugin built with full Windows SDK support"
+          
+          plugin-mingw: packages/.restored ## Build with MinGW (limited APIs - testing only)
+          	@echo "🔨 Building WSL Plugin with MinGW (limited APIs)..."
+          	@echo "⚠️  WARNING: This build has limited functionality"
+          	@echo "    Missing: AF_HYPERV sockets, WMI interfaces, VirtDisk API"
+          	@echo "    For production use: make plugin-windows"
+          	@echo ""
+          	@command -v x86_64-w64-mingw32-g++ >/dev/null || (echo "❌ MinGW not found. Use 'nix develop \".#mingw\"'" && exit 1)
+          	@mkdir -p temp_include
+          	@echo '#include <windows.h>' > temp_include/Windows.h
+          	x86_64-w64-mingw32-g++ -std=c++14 -shared \
+          	  -Itemp_include \
+          	  -Ipackages/Microsoft.WSL.PluginApi.2.1.3/build/native/include \
+          	  -o $(PLUGIN_NAME) $(PLUGIN_SOURCE) \
+          	  -lws2_32 -lkernel32 -luser32
+          	@rm -rf temp_include
+          	@echo "✅ Plugin built (MinGW - limited functionality)"
           	@echo "📊 Size: $$(stat -c%s $(PLUGIN_NAME)) bytes"
-          	@echo "🔍 Verifying custom strings..."
-          	@strings $(PLUGIN_NAME) | grep -i "custom" | head -3 || echo "⚠️  No custom strings found"
           
-          $(PACKAGES_DIR)/.restored: packages.config ## Restore NuGet packages
+          packages/.restored: packages.config ## Restore NuGet packages
           	@echo "📦 Restoring NuGet packages..."
-          	nuget restore packages.config -PackagesDirectory ./$(PACKAGES_DIR)
-          	@touch $(PACKAGES_DIR)/.restored
+          	nuget restore packages.config -PackagesDirectory ./packages
+          	@touch packages/.restored
           	@echo "✅ NuGet packages restored"
           
           install: $(PLUGIN_NAME) ## Prepare plugin for installation
@@ -811,18 +837,251 @@ echo "    process management failures that caused 30+ minute hangs!"
           clean: ## Clean build artifacts
           	@echo "🧹 Cleaning build artifacts..."
           	rm -f $(PLUGIN_NAME)
-          	rm -rf $(TEMP_DIR)
-          	rm -f $(PACKAGES_DIR)/.restored
+          	rm -rf temp_include
+          	rm -f packages/.restored
           	rm -f result*
           	@echo "✅ Clean completed"
         '';
 
         # Write Makefile to the development environment
         embeddedMakefile = pkgs.writeText "Makefile" makefileContent;
+        # Windows Container build script for production builds
+        buildWindowsPlugin = pkgs.writeShellScriptBin "build-windows-plugin" ''
+          set -euo pipefail
+          
+          echo "🐳 WSL Plugin Windows Container Build"
+          echo "===================================="
+          echo ""
+          
+          # Check if Dockerfile.windows exists
+          if [ ! -f Dockerfile.windows ]; then
+            echo "📄 Creating Dockerfile.windows..."
+            cat > Dockerfile.windows << 'EOF'
+          # Windows Server Core with Visual Studio Build Tools
+          FROM mcr.microsoft.com/windows/servercore:ltsc2022
+          
+          # Install VS Build Tools with required components
+          SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+          
+          RUN Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_buildtools.exe" -OutFile "vs_buildtools.exe" ; \
+              Start-Process -FilePath ".\vs_buildtools.exe" -ArgumentList "--quiet", "--wait", \
+                "--add", "Microsoft.VisualStudio.Workload.VCTools", \
+                "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041", \
+                "--add", "Microsoft.VisualStudio.Component.VC.CMake.Project" \
+                -NoNewWindow -Wait ; \
+              Remove-Item ".\vs_buildtools.exe"
+          
+          # Set environment for builds
+          RUN setx PATH "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin;%PATH%" /M
+          
+          WORKDIR C:\workspace
+          EOF
+            echo "✅ Dockerfile.windows created"
+          fi
+          
+          # Build the container if it doesn't exist
+          if ! podman images --format "{{.Repository}}:{{.Tag}}" | grep -q "wsl-plugin-builder:latest"; then
+            echo "🔨 Building Windows container (this may take 10-15 minutes)..."
+            podman build -f Dockerfile.windows -t wsl-plugin-builder:latest .
+            echo "✅ Container built successfully"
+          else
+            echo "✅ Using existing container: wsl-plugin-builder:latest"
+          fi
+          
+          # Create MSBuild project file if it doesn't exist
+          if [ ! -f plugin.vcxproj ]; then
+            echo "📄 Creating plugin.vcxproj..."
+            cat > plugin.vcxproj << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+            <ItemGroup Label="ProjectConfigurations">
+              <ProjectConfiguration Include="Release|x64">
+                <Configuration>Release</Configuration>
+                <Platform>x64</Platform>
+              </ProjectConfiguration>
+            </ItemGroup>
+            <PropertyGroup Label="Globals">
+              <VCProjectVersion>16.0</VCProjectVersion>
+              <ProjectGuid>{12345678-1234-1234-1234-123456789012}</ProjectGuid>
+              <Keyword>Win32Proj</Keyword>
+              <RootNamespace>wslplugin</RootNamespace>
+              <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+            </PropertyGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+            <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+              <ConfigurationType>DynamicLibrary</ConfigurationType>
+              <UseDebugLibraries>false</UseDebugLibraries>
+              <PlatformToolset>v143</PlatformToolset>
+              <WholeProgramOptimization>true</WholeProgramOptimization>
+              <CharacterSet>Unicode</CharacterSet>
+            </PropertyGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+            <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+              <LinkIncremental>false</LinkIncremental>
+              <TargetName>plugin</TargetName>
+            </PropertyGroup>
+            <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+              <ClCompile>
+                <WarningLevel>Level3</WarningLevel>
+                <FunctionLevelLinking>true</FunctionLevelLinking>
+                <IntrinsicFunctions>true</IntrinsicFunctions>
+                <SDLCheck>true</SDLCheck>
+                <PreprocessorDefinitions>NDEBUG;WSLPLUGIN_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+                <ConformanceMode>true</ConformanceMode>
+                <AdditionalIncludeDirectories>packages\Microsoft.WSL.PluginApi.2.1.3\build\native\include</AdditionalIncludeDirectories>
+              </ClCompile>
+              <Link>
+                <SubSystem>Windows</SubSystem>
+                <EnableCOMDATFolding>true</EnableCOMDATFolding>
+                <OptimizeReferences>true</OptimizeReferences>
+                <GenerateDebugInformation>true</GenerateDebugInformation>
+                <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+              </Link>
+            </ItemDefinitionGroup>
+            <ItemGroup>
+              <ClCompile Include="plugin.cpp" />
+            </ItemGroup>
+            <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+          </Project>
+          EOF
+            echo "✅ plugin.vcxproj created"
+          fi
+          
+          echo "🚀 Building plugin with Windows container..."
+          
+          # Run the build in the container
+          podman run --rm \
+            -v "$(pwd):/workspace:Z" \
+            -w /workspace \
+            wsl-plugin-builder:latest \
+            powershell -Command "
+              # Restore NuGet packages first
+              if (Test-Path 'packages.config') {
+                nuget restore packages.config -PackagesDirectory packages
+              }
+              
+              # Build the project
+              MSBuild plugin.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+              
+              # Copy output to expected location
+              if (Test-Path 'x64/Release/plugin.dll') {
+                Copy-Item 'x64/Release/plugin.dll' 'plugin.dll'
+                Write-Host '✅ Plugin built successfully: plugin.dll'
+                Get-Item plugin.dll | Format-List Name,Length
+              } else {
+                Write-Host '❌ Build failed - plugin.dll not found'
+                exit 1
+              }
+            "
+          
+          if [ -f plugin.dll ]; then
+            echo ""
+            echo "✅ Windows container build completed successfully!"
+            echo "📁 Output: plugin.dll ($(stat -c%s plugin.dll) bytes)"
+            echo "🔍 Built with full Windows SDK APIs (AF_HYPERV, WMI, VirtDisk)"
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
+        '';
+        
+        # Podman container management script  
+        manageContainers = pkgs.writeShellScriptBin "manage-containers" ''
+          case "$1" in
+            clean)
+              echo "🧹 Cleaning WSL plugin containers and images..."
+              podman container prune -f
+              podman rmi wsl-plugin-builder:latest 2>/dev/null || true
+              echo "✅ Containers cleaned"
+              ;;
+            status)
+              echo "📊 WSL Plugin Container Status"
+              echo "=============================="
+              echo ""
+              echo "Images:"
+              podman images --format "table {{.Repository}}:{{.Tag}} {{.Size}} {{.Created}}" | grep -E "(REPOSITORY|wsl-plugin)"
+              echo ""
+              echo "Containers:"
+              podman ps -a --format "table {{.Names}} {{.Status}} {{.Image}}" | grep -E "(NAMES|wsl-plugin)" || echo "No containers found"
+              ;;
+            build)
+              echo "🔨 Rebuilding WSL plugin container..."
+              podman rmi wsl-plugin-builder:latest 2>/dev/null || true
+              ${buildWindowsPlugin}/bin/build-windows-plugin
+              ;;
+            *)
+              echo "WSL Plugin Container Management"
+              echo ""
+              echo "Usage: manage-containers <command>"
+              echo ""
+              echo "Commands:"
+              echo "  status  Show container and image status"
+              echo "  clean   Remove all plugin containers and images"
+              echo "  build   Force rebuild the container"
+              ;;
+          esac
+        '';
       in
       {
-        # Default shell is now MinGW-based (was previously separate)
+        # Default shell is now Windows Container-based (winpod)
         devShells.default = pkgs.mkShell {
+          name = "wsl-plugin-winpod-dev";
+          
+          buildInputs = with pkgs; [
+            # Container tools
+            podman
+            podman-compose
+            
+            # Build tools  
+            gnumake
+            
+            # Package management
+            nuget
+            
+            # Development utilities
+            file
+            binutils
+            git
+            
+            # WSL Plugin specific tools
+            buildWindowsPlugin
+            manageContainers
+            
+            # For testing (NixOS tests framework)
+            # Note: Full testing requires nix-build, available in shell
+          ];
+          
+          shellHook = ''
+            # Copy Makefile to current directory
+            if [ ! -f Makefile ] || [ "${embeddedMakefile}" -nt Makefile ]; then
+              cp "${embeddedMakefile}" Makefile
+              echo "📄 Makefile updated from flake definition"
+            fi
+            
+            echo "🐳 WSL Plugin Development Environment (Windows Container)"
+            echo "========================================================"
+            echo ""
+            echo "🚀 Quick start:"
+            echo "  build-windows-plugin    # Build plugin with full Windows SDK APIs"
+            echo "  manage-containers       # Container management tools"
+            echo "  make plugin            # Build plugin with auto-detection"
+            echo "  make test              # Run automated tests"
+            echo ""
+            echo "🔧 Container workflow:"
+            echo "  1. First build downloads Windows Server Core (~4GB)"
+            echo "  2. Installs Visual Studio Build Tools in container"
+            echo "  3. Builds plugin.dll with real Windows APIs"
+            echo ""
+            echo "Environment:"
+            echo "  Podman: $(podman --version 2>/dev/null || echo 'Not available')"
+            echo "  Container: Windows Server Core + VS Build Tools"
+            echo ""
+            echo "💡 This replaces MinGW with full Windows SDK compilation"
+          '';
+        };
+        
+        # MinGW shell for lightweight development (no longer default)
+        devShells.mingw = pkgs.mkShell {
           name = "wsl-plugin-mingw-dev";
           
           buildInputs = with pkgs; [
@@ -851,12 +1110,16 @@ echo "    process management failures that caused 30+ minute hangs!"
               echo "📄 Makefile updated from flake definition"
             fi
             
-            echo "🔨 WSL Plugin Development Environment (MinGW)"
-            echo "============================================="
+            echo "🔨 WSL Plugin Development Environment (MinGW - Limited APIs)"
+            echo "==========================================================="
+            echo ""
+            echo "⚠️  WARNING: MinGW has limited Windows SDK support"
+            echo "    Missing: AF_HYPERV sockets, WMI interfaces, VirtDisk API"
+            echo "    Use 'nix develop' (default) for full API support"
             echo ""
             echo "🚀 Quick start:"
             echo "  make help     # Show all available targets"
-            echo "  make plugin   # Build the WSL plugin"
+            echo "  make plugin   # Build the WSL plugin (limited functionality)"
             echo "  make test     # Run automated tests"
             echo ""
             echo "Environment:"
