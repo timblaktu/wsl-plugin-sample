@@ -845,18 +845,234 @@ echo "    process management failures that caused 30+ minute hangs!"
 
         # Write Makefile to the development environment
         embeddedMakefile = pkgs.writeText "Makefile" makefileContent;
-        # Windows Container build script for production builds
+        # Enhanced Windows Container build script with WSL interop support
         buildWindowsPlugin = pkgs.writeShellScriptBin "build-windows-plugin" ''
           set -euo pipefail
           
-          echo "🐳 WSL Plugin Windows Container Build"
-          echo "===================================="
-          echo ""
+          # WSL Interop function - runs containers on Windows host via PowerShell
+          exec_wsl_windows_build() {
+            # Get Windows equivalent of current directory
+            local wsl_path="$(pwd)"
+            local windows_path
+            
+            # Convert WSL path to Windows path
+            if [[ "$wsl_path" =~ ^/mnt/([a-z])/ ]]; then
+              # Path like /mnt/c/... 
+              local drive="''${BASH_REMATCH[1]}"
+              windows_path="''${drive^^}:''${wsl_path#/mnt/$drive}"
+              windows_path="''${windows_path//\//\\}"
+            else
+              # WSL internal path - use wslpath if available
+              if command -v wslpath >/dev/null 2>&1; then
+                windows_path="$(wslpath -w "$wsl_path")"
+              else
+                echo "❌ Cannot convert WSL path to Windows path: $wsl_path"
+                echo "💡 Please run from a Windows drive (/mnt/c/...)"
+                exit 1
+              fi
+            fi
+            
+            echo "[INFO] Working directory: $wsl_path"
+            echo "[INFO] Windows path: $windows_path"
+            echo ""
+            
+            # Create PowerShell build script on Windows side
+            local ps_script_path="/mnt/c/temp/wsl-plugin-build.ps1"
+            echo "[INFO] Creating Windows-side PowerShell build script..."
+            
+            mkdir -p "$(dirname "$ps_script_path")"
+            cat > "$ps_script_path" << 'PSEOF'
+          param(
+              [string]$ProjectPath = "."
+          )
           
-          # Check if Dockerfile.windows exists
-          if [ ! -f Dockerfile.windows ]; then
-            echo "📄 Creating Dockerfile.windows..."
-            cat > Dockerfile.windows << 'EOF'
+          $ErrorActionPreference = "Stop"
+          
+          Write-Host "🐳 Windows Container Build via WSL Interop"
+          Write-Host "=========================================="
+          Write-Host ""
+          Write-Host "📁 Project path: $ProjectPath"
+          
+          # Change to project directory
+          Set-Location $ProjectPath
+          
+          # Check for container runtime
+          $ContainerCmd = $null
+          foreach ($cmd in @("docker", "podman")) {
+              if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+                  $ContainerCmd = $cmd
+                  Write-Host "✅ Found container runtime: $cmd"
+                  break
+              }
+          }
+          
+          if (-not $ContainerCmd) {
+              Write-Host "❌ No container runtime found (docker or podman required)"
+              Write-Host "💡 Install Docker Desktop or Podman Desktop for Windows"
+              exit 1
+          }
+          
+          # Create Dockerfile if it doesn't exist
+          if (-not (Test-Path "Dockerfile.windows")) {
+              Write-Host "📄 Creating Dockerfile.windows..."
+              @"
+          # Windows Server Core with Visual Studio Build Tools
+          FROM mcr.microsoft.com/windows/servercore:ltsc2022
+          
+          # Install VS Build Tools with required components
+          SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue';"]
+          
+          RUN Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_buildtools.exe" -OutFile "vs_buildtools.exe" ; \
+              Start-Process -FilePath ".\vs_buildtools.exe" -ArgumentList "--quiet", "--wait", \
+                "--add", "Microsoft.VisualStudio.Workload.VCTools", \
+                "--add", "Microsoft.VisualStudio.Component.Windows10SDK.19041", \
+                "--add", "Microsoft.VisualStudio.Component.VC.CMake.Project" \
+                -NoNewWindow -Wait ; \
+              Remove-Item ".\vs_buildtools.exe"
+          
+          # Set environment for builds
+          RUN setx PATH "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin;%PATH%" /M
+          
+          WORKDIR C:\workspace
+          "@ | Out-File -FilePath "Dockerfile.windows" -Encoding ASCII
+              Write-Host "✅ Dockerfile.windows created"
+          }
+          
+          # Create MSBuild project file if it doesn't exist
+          if (-not (Test-Path "plugin.vcxproj")) {
+              Write-Host "📄 Creating plugin.vcxproj..."
+              @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+            <ItemGroup Label="ProjectConfigurations">
+              <ProjectConfiguration Include="Release|x64">
+                <Configuration>Release</Configuration>
+                <Platform>x64</Platform>
+              </ProjectConfiguration>
+            </ItemGroup>
+            <PropertyGroup Label="Globals">
+              <VCProjectVersion>16.0</VCProjectVersion>
+              <ProjectGuid>{12345678-1234-1234-1234-123456789012}</ProjectGuid>
+              <Keyword>Win32Proj</Keyword>
+              <RootNamespace>wslplugin</RootNamespace>
+              <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+            </PropertyGroup>
+            <Import Project="`$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+            <PropertyGroup Condition="'`$(Configuration)|`$(Platform)'=='Release|x64'" Label="Configuration">
+              <ConfigurationType>DynamicLibrary</ConfigurationType>
+              <UseDebugLibraries>false</UseDebugLibraries>
+              <PlatformToolset>v143</PlatformToolset>
+              <WholeProgramOptimization>true</WholeProgramOptimization>
+              <CharacterSet>Unicode</CharacterSet>
+            </PropertyGroup>
+            <Import Project="`$(VCTargetsPath)\Microsoft.Cpp.props" />
+            <PropertyGroup Condition="'`$(Configuration)|`$(Platform)'=='Release|x64'">
+              <LinkIncremental>false</LinkIncremental>
+              <TargetName>plugin</TargetName>
+            </PropertyGroup>
+            <ItemDefinitionGroup Condition="'`$(Configuration)|`$(Platform)'=='Release|x64'">
+              <ClCompile>
+                <WarningLevel>Level3</WarningLevel>
+                <FunctionLevelLinking>true</FunctionLevelLinking>
+                <IntrinsicFunctions>true</IntrinsicFunctions>
+                <SDLCheck>true</SDLCheck>
+                <PreprocessorDefinitions>NDEBUG;WSLPLUGIN_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+                <ConformanceMode>true</ConformanceMode>
+                <AdditionalIncludeDirectories>packages\Microsoft.WSL.PluginApi.2.1.3\build\native\include</AdditionalIncludeDirectories>
+              </ClCompile>
+              <Link>
+                <SubSystem>Windows</SubSystem>
+                <EnableCOMDATFolding>true</EnableCOMDATFolding>
+                <OptimizeReferences>true</OptimizeReferences>
+                <GenerateDebugInformation>true</GenerateDebugInformation>
+                <AdditionalDependencies>ws2_32.lib;wbemuuid.lib;ole32.lib;oleaut32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+              </Link>
+            </ItemDefinitionGroup>
+            <ItemGroup>
+              <ClCompile Include="plugin.cpp" />
+            </ItemGroup>
+            <Import Project="`$(VCTargetsPath)\Microsoft.Cpp.targets" />
+          </Project>
+          "@ | Out-File -FilePath "plugin.vcxproj" -Encoding UTF8
+              Write-Host "✅ plugin.vcxproj created"
+          }
+          
+          # Build or check for existing container
+          $ImageName = "wsl-plugin-builder:latest"
+          $ImageExists = & $ContainerCmd images --format "{{.Repository}}:{{.Tag}}" | Select-String -Pattern $ImageName
+          
+          if (-not $ImageExists) {
+              Write-Host "[INFO] Building Windows container (this may take 10-15 minutes)..."
+              & $ContainerCmd build -f Dockerfile.windows -t $ImageName .
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host "[ERROR] Container build failed"
+                  exit 1
+              }
+              Write-Host "[SUCCESS] Container built successfully"
+          } else {
+              Write-Host "[SUCCESS] Using existing container: $ImageName"
+          }
+          
+          Write-Host "[INFO] Building plugin with Windows container..."
+          
+          # Run the build in the container
+          & $ContainerCmd run --rm -v "''${PWD}:C:\workspace" -w "C:\workspace" $ImageName powershell -Command @"
+              # Restore NuGet packages first
+              if (Test-Path 'packages.config') {
+                  nuget restore packages.config -PackagesDirectory packages
+              }
+              
+              # Build the project
+              MSBuild plugin.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+              
+              # Copy output to expected location
+              if (Test-Path 'x64/Release/plugin.dll') {
+                  Copy-Item 'x64/Release/plugin.dll' 'plugin.dll'
+                  Write-Host '[SUCCESS] Plugin built successfully: plugin.dll'
+                  Get-Item plugin.dll | Format-List Name,Length
+              } else {
+                  Write-Host '[ERROR] Build failed - plugin.dll not found'
+                  exit 1
+              }
+          "@
+          
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "[ERROR] Container build failed"
+              exit 1
+          }
+          
+          if (Test-Path "plugin.dll") {
+              $FileSize = (Get-Item "plugin.dll").Length
+              Write-Host ""
+              Write-Host "[SUCCESS] Windows container build completed successfully!"
+              Write-Host "[INFO] Output: plugin.dll ($FileSize bytes)"
+              Write-Host "[INFO] Built with full Windows SDK APIs (AF_HYPERV, WMI, VirtDisk)"
+          } else {
+              Write-Host "[ERROR] Build failed - plugin.dll not found"
+              exit 1
+          }
+          PSEOF
+            
+            echo "[SUCCESS] PowerShell script created at $ps_script_path"
+            echo ""
+            
+            # Execute the PowerShell script on Windows host
+            echo "[INFO] Executing Windows container build via PowerShell..."
+            /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe \
+              -ExecutionPolicy Bypass \
+              -File "C:\\temp\\wsl-plugin-build.ps1" \
+              -ProjectPath "$windows_path"
+            
+            # Clean up the temporary script
+            rm -f "$ps_script_path"
+          }
+          
+          # Linux native container function (original implementation)
+          exec_linux_build() {
+            # Check if Dockerfile.windows exists
+            if [ ! -f Dockerfile.windows ]; then
+              echo "📄 Creating Dockerfile.windows..."
+              cat > Dockerfile.windows << 'EOF'
           # Windows Server Core with Visual Studio Build Tools
           FROM mcr.microsoft.com/windows/servercore:ltsc2022
           
@@ -876,22 +1092,22 @@ echo "    process management failures that caused 30+ minute hangs!"
           
           WORKDIR C:\workspace
           EOF
-            echo "✅ Dockerfile.windows created"
-          fi
-          
-          # Build the container if it doesn't exist
-          if ! podman images --format "{{.Repository}}:{{.Tag}}" | grep -q "wsl-plugin-builder:latest"; then
-            echo "🔨 Building Windows container (this may take 10-15 minutes)..."
-            podman build -f Dockerfile.windows -t wsl-plugin-builder:latest .
-            echo "✅ Container built successfully"
-          else
-            echo "✅ Using existing container: wsl-plugin-builder:latest"
-          fi
-          
-          # Create MSBuild project file if it doesn't exist
-          if [ ! -f plugin.vcxproj ]; then
-            echo "📄 Creating plugin.vcxproj..."
-            cat > plugin.vcxproj << 'EOF'
+              echo "✅ Dockerfile.windows created"
+            fi
+            
+            # Build the container if it doesn't exist
+            if ! podman images --format "{{.Repository}}:{{.Tag}}" | grep -q "wsl-plugin-builder:latest"; then
+              echo "🔨 Building Windows container (this may take 10-15 minutes)..."
+              podman build -f Dockerfile.windows -t wsl-plugin-builder:latest .
+              echo "✅ Container built successfully"
+            else
+              echo "✅ Using existing container: wsl-plugin-builder:latest"
+            fi
+            
+            # Create MSBuild project file if it doesn't exist
+            if [ ! -f plugin.vcxproj ]; then
+              echo "📄 Creating plugin.vcxproj..."
+              cat > plugin.vcxproj << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
             <ItemGroup Label="ProjectConfigurations">
@@ -944,44 +1160,67 @@ echo "    process management failures that caused 30+ minute hangs!"
             <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
           </Project>
           EOF
-            echo "✅ plugin.vcxproj created"
-          fi
+              echo "✅ plugin.vcxproj created"
+            fi
+            
+            echo "🚀 Building plugin with Windows container..."
+            
+            # Run the build in the container
+            podman run --rm \
+              -v "$(pwd):/workspace:Z" \
+              -w /workspace \
+              wsl-plugin-builder:latest \
+              powershell -Command "
+                # Restore NuGet packages first
+                if (Test-Path 'packages.config') {
+                  nuget restore packages.config -PackagesDirectory packages
+                }
+                
+                # Build the project
+                MSBuild plugin.vcxproj /p:Configuration=Release /p:Platform=x64 /m
+                
+                # Copy output to expected location
+                if (Test-Path 'x64/Release/plugin.dll') {
+                  Copy-Item 'x64/Release/plugin.dll' 'plugin.dll'
+                  Write-Host '✅ Plugin built successfully: plugin.dll'
+                  Get-Item plugin.dll | Format-List Name,Length
+                } else {
+                  Write-Host '❌ Build failed - plugin.dll not found'
+                  exit 1
+                }
+              "
+            
+            if [ -f plugin.dll ]; then
+              echo ""
+              echo "✅ Windows container build completed successfully!"
+              echo "📁 Output: plugin.dll ($(stat -c%s plugin.dll) bytes)"
+              echo "🔍 Built with full Windows SDK APIs (AF_HYPERV, WMI, VirtDisk)"
+            else
+              echo "❌ Build failed"
+              exit 1
+            fi
+          }
           
-          echo "🚀 Building plugin with Windows container..."
+          # Main execution logic
+          echo "🐳 WSL Plugin Windows Container Build"
+          echo "===================================="
+          echo ""
           
-          # Run the build in the container
-          podman run --rm \
-            -v "$(pwd):/workspace:Z" \
-            -w /workspace \
-            wsl-plugin-builder:latest \
-            powershell -Command "
-              # Restore NuGet packages first
-              if (Test-Path 'packages.config') {
-                nuget restore packages.config -PackagesDirectory packages
-              }
-              
-              # Build the project
-              MSBuild plugin.vcxproj /p:Configuration=Release /p:Platform=x64 /m
-              
-              # Copy output to expected location
-              if (Test-Path 'x64/Release/plugin.dll') {
-                Copy-Item 'x64/Release/plugin.dll' 'plugin.dll'
-                Write-Host '✅ Plugin built successfully: plugin.dll'
-                Get-Item plugin.dll | Format-List Name,Length
-              } else {
-                Write-Host '❌ Build failed - plugin.dll not found'
-                exit 1
-              }
-            "
-          
-          if [ -f plugin.dll ]; then
+          # Detect if we're running in WSL
+          if [ -n "''${WSL_DISTRO_NAME:-}" ]; then
+            echo "[INFO] WSL environment detected: $WSL_DISTRO_NAME"
+            echo "[INFO] Using WSL interop for Windows host container build"
             echo ""
-            echo "✅ Windows container build completed successfully!"
-            echo "📁 Output: plugin.dll ($(stat -c%s plugin.dll) bytes)"
-            echo "🔍 Built with full Windows SDK APIs (AF_HYPERV, WMI, VirtDisk)"
+            
+            # Use WSL interop approach
+            exec_wsl_windows_build
           else
-            echo "❌ Build failed"
-            exit 1
+            echo "[INFO] Linux environment detected"
+            echo "[INFO] Using native Linux container build"
+            echo ""
+            
+            # Use original Linux container approach  
+            exec_linux_build
           fi
         '';
         
