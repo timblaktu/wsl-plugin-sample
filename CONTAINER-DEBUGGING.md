@@ -20,7 +20,7 @@
 - [ ] **Task 5**: Enable detailed Docker debug logging analysis
 - [ ] **Task 6**: Windows Docker service restart and verification
 
-**Current Task**: Docker Desktop Installation with Hyper-V Backend - Ready to proceed with confirmed virtualization
+**Current Task**: Complete Docker Manual Installation Removal - Clean system before Docker Desktop
 **Iteration Policy**: One task per chat session with complete status updates
 
 ## Environment Analysis Summary
@@ -180,12 +180,37 @@ BIOS Screenshots: 20251022_151054.jpg, 20251022_151634.jpg, 20251022_151710.jpg,
 - ✅ **Task 3**: Windows container host configuration - **VIRTUALIZATION ARCHITECTURE CONFIRMED**
 - ✅ **Task 3.1**: BIOS hardware virtualization verification - **PERFECT CONFIGURATION CONFIRMED**
 - ✅ **Task 3.2**: VT-x identification and verification - **VT-x ENABLED (Lenovo naming resolved)**
-- 🔄 **Current**: Docker Desktop installation with Hyper-V backend
-- ⏳ **Next**: Verify Windows container functionality after installation
+- 🔄 **Current**: Complete Docker manual installation removal (services, binaries, data)
+- ⏳ **Next**: Docker Desktop installation with Hyper-V backend
+- ⏳ **Following**: Verify Windows container functionality after installation
 
-## Solution Recommendations
+## Docker Manual Installation Removal Required
 
-### ONLY Viable Solution:
+### ⚠️ **CRITICAL PREREQUISITE**: Complete Manual Docker Removal
+Before Docker Desktop installation, must completely remove existing manual Docker installation:
+
+**Current Manual Installation Status**:
+```
+Docker Service: RUNNING (must stop and remove)
+Docker Binary: Manual installation (must uninstall)
+Docker Data: Container images, volumes (must clean)
+Registry Entries: Windows service registration (must remove)
+```
+
+**Removal Script Available**: `/home/tim/src/wsl-plugin-sample/docker-manual-removal.ps1`
+
+**Removal Steps** (automated in script):
+1. **Stop Docker Service**: `Stop-Service docker`
+2. **Remove Windows Service**: `sc.exe delete docker` 
+3. **Uninstall Docker Binary**: Remove from Program Files or manual installation location
+4. **Clean Docker Data**: Remove `C:\ProgramData\docker\` and container storage
+5. **Registry Cleanup**: Remove Docker service registry entries
+6. **Path Cleanup**: Remove Docker from system PATH
+7. **Verify Complete Removal**: Ensure no Docker processes or services remain
+
+**Usage**: Run as Administrator in PowerShell: `PowerShell -ExecutionPolicy Bypass -File docker-manual-removal.ps1`
+
+### Docker Desktop Installation Strategy:
 **Install Docker Desktop with Hyper-V backend** - Only supported method for Windows containers on Windows 10/11
 
 **Critical Requirements**:
