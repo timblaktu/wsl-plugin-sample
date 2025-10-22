@@ -158,18 +158,28 @@ Hyper-V Service: Running (vmms active)
 
 ## Solution Recommendations
 
-### Immediate Solution:
-**Install Docker Desktop** - Only supported method for Windows containers on Windows 10/11
+### ONLY Viable Solution:
+**Install Docker Desktop with Hyper-V backend** - Only supported method for Windows containers on Windows 10/11
 
-### Alternative Solutions:
-1. **Upgrade to Windows Server** - Supports manual Docker binary installation
-2. **Use Docker Desktop with WSL2 backend** - Recommended approach for development
-3. **Migrate build to Linux containers** - Use existing Nix infrastructure instead of Windows containers
+**Critical Requirements**:
+- Must use **Hyper-V backend** (NOT WSL2 backend)
+- WSL2 backend cannot run Windows containers (requires Linux kernel, Windows containers need Windows kernel)
+- Windows containers require direct Windows kernel access via Hyper-V isolation
+
+### Alternative Solution (Not Recommended):
+1. **Upgrade to Windows Server** - Supports manual Docker binary installation, but impractical for development
+
+### Invalid Approaches (Already Attempted/Impossible):
+- ❌ **WSL2 backend**: Cannot run Windows containers (Linux kernel incompatible)
+- ❌ **Linux containers**: Cannot build Windows binaries requiring Windows APIs
+- ❌ **MinGW cross-compilation**: Already attempted and failed (documented in repository)
+- ❌ **WINE approach**: Already attempted and failed (documented in repository)
 
 ## Implementation Notes
-- Current WSL2 NixOS environment already functional for development
-- Container build approach may be unnecessarily complex for cross-compilation scenario
-- Consider MinGW cross-compilation directly in Nix instead of Windows containers
+- Docker Desktop with Hyper-V backend is the only path forward for Windows container builds
+- Current approach is experimental but worth completing to validate container build viability
+- VM approach (like GitHub Actions Windows runners) remains fallback option
+- Container approach complexity may ultimately favor VM-based builds for CI
 
 ---
 *Document maintained by Claude Code task manager - updated after each iteration*
