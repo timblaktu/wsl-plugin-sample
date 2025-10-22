@@ -197,7 +197,9 @@ Docker Data: Container images, volumes (must clean)
 Registry Entries: Windows service registration (must remove)
 ```
 
-**Removal Script Available**: `/home/tim/src/wsl-plugin-sample/docker-manual-removal.ps1`
+**Removal Script Available**: `/home/tim/src/wsl-plugin-sample/docker-manual-removal-clean.ps1`
+
+**SCRIPT STATUS**: Fixed PowerShell 5.1 compatibility issues. Original script had encoding/parsing errors. Clean version uses ASCII-only characters and simplified syntax for Windows PowerShell 5.1 compatibility.
 
 **Removal Steps** (automated in script):
 1. **Stop Docker Service**: `Stop-Service docker`
@@ -208,7 +210,7 @@ Registry Entries: Windows service registration (must remove)
 6. **Path Cleanup**: Remove Docker from system PATH
 7. **Verify Complete Removal**: Ensure no Docker processes or services remain
 
-**Usage**: Run as Administrator in PowerShell: `PowerShell -ExecutionPolicy Bypass -File docker-manual-removal.ps1`
+**Usage**: Run as Administrator in PowerShell: `PowerShell -ExecutionPolicy Bypass -File docker-manual-removal-clean.ps1`
 
 ### Docker Desktop Installation Strategy:
 **Install Docker Desktop with Hyper-V backend** - Only supported method for Windows containers on Windows 10/11
