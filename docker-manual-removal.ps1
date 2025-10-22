@@ -126,8 +126,12 @@ Write-Host "🔄 Step 4: Removing Docker Data..." -ForegroundColor Cyan
 $dockerDataPath = "C:\ProgramData\docker"
 if (Test-Path $dockerDataPath) {
     Write-Host "   Found Docker data directory: $dockerDataPath" -ForegroundColor Yellow
-    $items = Get-ChildItem -Path $dockerDataPath -Recurse | Measure-Object
-    Write-Host "   Contains $($items.Count) items (containers, images, volumes, etc.)" -ForegroundColor Yellow
+    try {
+        $items = Get-ChildItem -Path $dockerDataPath -Recurse | Measure-Object
+        Write-Host "   Contains $($items.Count) items (containers, images, volumes, etc.)" -ForegroundColor Yellow
+    } catch {
+        Write-Host "   Unable to count items in data directory" -ForegroundColor Yellow
+    }
     Write-Host "   This will PERMANENTLY DELETE all Docker containers, images, and volumes" -ForegroundColor Red
     $confirm = Read-Host "   Delete Docker data directory? (y/N)"
     if ($confirm -eq 'y' -or $confirm -eq 'Y') {
