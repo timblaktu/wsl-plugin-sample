@@ -9,6 +9,8 @@
 
 3. **After setting up two, set up a very prominent rule in our working document file at the top that indicates you should always stage and commit your changes after completing your work each iteration. Commit messages SHALL NOT HAVE ANY AI ATTRIBUTION.**
 
+4. **🔥 CRITICAL ADMIN TASK GUIDANCE: When the IMMEDIATE ACTION requires user execution (Windows/PowerShell as Admin), Claude's role is to iteratively guide the user one step at a time, providing concise instructions AND diagnostic commands wrapped in a single script (.sh or .ps1) that the user can run in one go and provide stdout/stderr back to Claude.**
+
 **CRITICAL: ALWAYS stage and commit changes after completing each task iteration. Commit messages must be human-authored with NO AI attribution.**
 
 ## Task List (Manager: Claude Code)
