@@ -25,6 +25,7 @@ Makefile text eol=lf
 *.cmake text eol=lf
 *.gitignore text eol=lf
 *.gitattributes text eol=lf
+Dockerfile* text eol=lf
 
 # Windows-specific files that should keep CRLF
 *.sln text eol=crlf

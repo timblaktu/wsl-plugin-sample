@@ -398,6 +398,7 @@ FodyWeavers.xsd
 *.sln.iml
 
 .claude/
+.serena/
 CLAUDE.md
 
 # MinGW build outputs
@@ -406,3 +407,4 @@ CLAUDE.md
 
 # Temporary build files
 temp_include/
+build/
