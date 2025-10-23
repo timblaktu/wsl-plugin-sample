@@ -172,7 +172,7 @@ GUID GetVmGuidForDistribution(PCWSTR distributionName) {
                         LogMessage("Successfully parsed VM GUID");
                     } else {
                         LogMessage("Failed to parse VM GUID string");
-                        vmGuid = GUID_NULL;
+                        vmGuid = {0};
                     }
                 } else {
                     LogMessage("Failed to get VM Name property");
