@@ -12,10 +12,9 @@
 #include <windows.h>
 
 // Now include specific Windows SDK headers in logical groups
-// Storage and disk management - define GUID constants in this compilation unit
-#define INITGUID
+// Storage and disk management - proper GUID initialization approach
+#include <initguid.h>
 #include <virtdisk.h>
-#undef INITGUID
 #include <setupapi.h>
 #include <winioctl.h>
 // Note: ntddstor.h is often already included via winioctl.h
@@ -53,12 +52,7 @@ const GUID ServiceGuid5001 = {
     {0xbd, 0x58, 0x64, 0x00, 0x6a, 0x79, 0x86, 0xd3}
 };
 
-// Define the VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT constant directly
-// This should normally come from virtdisk.h but appears to be missing
-const GUID VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT = {
-    0xEC984AEC, 0xA0F9, 0x47e9, 
-    {0x90, 0x1F, 0x71, 0x41, 0x5A, 0x66, 0x34, 0x5B}
-};
+// VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT should now be properly defined via initguid.h + virtdisk.h
 
 // Global variables
 std::ofstream g_logfile;
@@ -170,7 +164,7 @@ GUID GetVmGuidForDistribution(PCWSTR distributionName) {
                 hres = pclsObj->Get(L"Name", 0, &vtProp, 0, 0);
                 if (SUCCEEDED(hres) && vtProp.vt == VT_BSTR) {
                     std::wstring guidStr(vtProp.bstrVal);
-                    std::string guidStrNarrow(guidStr.begin(), guidStr.end());
+                    std::string guidStrNarrow = std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(guidStr);
                     LogMessage("Found VM GUID: " + guidStrNarrow);
                     
                     // Convert string to GUID
