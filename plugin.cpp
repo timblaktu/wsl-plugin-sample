@@ -53,6 +53,13 @@ const GUID ServiceGuid5001 = {
     {0xbd, 0x58, 0x64, 0x00, 0x6a, 0x79, 0x86, 0xd3}
 };
 
+// Define the VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT constant directly
+// This should normally come from virtdisk.h but appears to be missing
+const GUID VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT = {
+    0xEC984AEC, 0xA0F9, 0x47e9, 
+    {0x90, 0x1F, 0x71, 0x41, 0x5A, 0x66, 0x34, 0x5B}
+};
+
 // Global variables
 std::ofstream g_logfile;
 const WSLPluginAPIV1* g_api = nullptr;
