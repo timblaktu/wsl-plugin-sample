@@ -12,8 +12,10 @@
 #include <windows.h>
 
 // Now include specific Windows SDK headers in logical groups
-// Storage and disk management
+// Storage and disk management - define GUID constants in this compilation unit
+#define INITGUID
 #include <virtdisk.h>
+#undef INITGUID
 #include <setupapi.h>
 #include <winioctl.h>
 // Note: ntddstor.h is often already included via winioctl.h
