@@ -76,7 +76,7 @@ echo "Building WSL plugin in Windows container..."
     powershell -Command "& { 
         C:\BuildTools\nuget.exe restore C:\work\packages.config -PackagesDirectory C:\work\packages;
         if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
-        msbuild 'C:\work\wsl-plugin-sample.sln' /p:Configuration=Release /p:Platform=x64 '/p:OutDir=C:\work\build\'
+        msbuild 'C:\work\wsl-plugin-sample.sln' /t:Rebuild /p:Configuration=Release /p:Platform=x64 '/p:OutDir=C:\work\build\'
         exit \$LASTEXITCODE
     }"
   )

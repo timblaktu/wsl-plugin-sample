@@ -1,21 +1,40 @@
 // WSL Plugin for NixOS-WSL Disk Management
-// Implements VSOCK-based communication for declarative disk requirements
 
+// Define target Windows version before any includes
+#include <SDKDDKVer.h>
+
+// Minimize Windows header scope to reduce conflicts
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+
+// Critical: winsock2.h MUST come before windows.h
 #include <winsock2.h>
 #include <windows.h>
-#include <hvsocket.h>
-#include <comdef.h>
-#include <wbemidl.h>
+
+// Now include specific Windows SDK headers in logical groups
+// Storage and disk management
 #include <virtdisk.h>
 #include <setupapi.h>
 #include <winioctl.h>
-#include <ntddstor.h>
+// Note: ntddstor.h is often already included via winioctl.h
+// Only include it explicitly if you need definitions not in winioctl.h
+
+// COM and WMI
+#include <comdef.h>
+#include <wbemidl.h>
+
+// Hyper-V sockets
+#include <hvsocket.h>
+
+// Standard library (these should come last)
 #include <string>
 #include <vector>
 #include <sstream>
 #include <fstream>
 #include <codecvt>
 #include <locale>
+
+// WSL Plugin API (should come after Windows headers)
 #include "WslPluginApi.h"
 
 #pragma comment(lib, "wbemuuid.lib")
