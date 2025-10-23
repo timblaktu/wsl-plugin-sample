@@ -1,9 +1,9 @@
 // Unit tests for string conversion functions
 #include "gtest/gtest.h"
+#include <windows.h>  // Must be first to define types correctly
 #include <string>
 #include <codecvt>
 #include <locale>
-#include <windows.h>
 
 // Test class for string conversion
 class StringConversionTest : public ::testing::Test {

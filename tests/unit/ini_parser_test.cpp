@@ -1,5 +1,6 @@
 // Unit tests for INI configuration parser
 #include "gtest/gtest.h"
+#include <windows.h>  // Required for DWORD, CP_UTF8, MultiByteToWideChar
 #include <string>
 #include <vector>
 #include <sstream>
