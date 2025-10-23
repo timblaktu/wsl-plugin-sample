@@ -28,6 +28,9 @@ sync_to_windows() {
     
     local branch=$(git branch --show-current) 
 
+    echo "commmitting local changes before syncing to Windows.."
+    ( set -x; git commit -av )
+
     if [ ! -d "$win_path_from_wsl" ]; then
         mkdir -p "$(dirname "$win_path_from_wsl")"
         # Clone from WSL repo + add remote for future syncing
@@ -37,19 +40,6 @@ sync_to_windows() {
         # Pull from WSL remote
         ( set -x; git -C "$win_path_from_wsl" pull wsl $branch )
     fi
-    # Running git.exe from Windows side (causes ownership issues)
-    # if [ ! -d "$win_path_from_wsl" ]; then
-    #     mkdir -p "$(dirname "$win_path_from_wsl")"
-    #     # Clone from WSL repo + add remote for future syncing
-    #     ( set -x; git.exe clone "$wsl_path_from_win" "$win_path"
-    #       git.exe -C "$win_path" remote add wsl "$wsl_path_from_win" )
-    # else
-    #     # Pull from WSL remote
-    #     ( set -x; git.exe -C "$win_path" pull wsl )
-    # fi
-
-    # Another non-git way to do this..
-    # rsync -av --delete ~/src/wsl-plugin-sample/ /mnt/c/path/to/windows/copy/
 }
 
 CONTAINER_IMAGE="wsl-plugin-build:latest"

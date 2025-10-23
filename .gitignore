@@ -408,3 +408,4 @@ CLAUDE.md
 # Temporary build files
 temp_include/
 build/
+*.vim
