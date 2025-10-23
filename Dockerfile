@@ -21,6 +21,11 @@ RUN Write-Host 'Downloading VS Build Tools installer (~2MB)...' ; \
     Write-Host 'VS Build Tools installation complete!' ; \
     Remove-Item '.\vs_buildtools.exe';
 
+# Download and install NuGet
+RUN Write-Host 'Downloading NuGet CLI...' ; \
+    Invoke-WebRequest -Uri 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile 'C:\BuildTools\nuget.exe' ; \
+    Write-Host 'NuGet CLI installed'
+
 # Intent is to safely cleanup any hung processes in this order:
 #     1. Kill processes (Stop-Process -Force)
 #     2. Wait for termination (Start-Sleep)

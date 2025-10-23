@@ -115,7 +115,7 @@ GUID GetVmGuidForDistribution(PCWSTR distributionName) {
         
         // Query for VM with matching ElementName
         std::wstring query = L"SELECT Name FROM Msvm_ComputerSystem WHERE Caption = 'Virtual Machine' AND ElementName = '";
-        std::wstring wDistName(distributionName.begin(), distributionName.end());
+        std::wstring wDistName(distributionName);
         query += wDistName + L"'";
         
         BSTR wql = SysAllocString(L"WQL");
@@ -159,7 +159,8 @@ GUID GetVmGuidForDistribution(PCWSTR distributionName) {
                 VariantClear(&vtProp);
                 pclsObj->Release();
             } else {
-                LogMessage("No matching VM found for distribution: " + distributionName);
+                LogMessage("No matching VM found for distribution: " + 
+                          std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(distributionName));
             }
             
             pEnumerator->Release();

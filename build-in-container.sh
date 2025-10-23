@@ -73,8 +73,24 @@ echo "Building WSL plugin in Windows container..."
   docker.exe --debug run --rm \
     -v "$WINDOWS_PROJECT_PATH:C:\\work" \
     "$CONTAINER_IMAGE" \
-    msbuild C:\\work\\wsl-plugin-sample.sln /p:Configuration=Release /p:Platform=x64 /p:OutDir=C:\\work\\build
+    powershell -Command "& { 
+        C:\BuildTools\nuget.exe restore C:\work\packages.config -PackagesDirectory C:\work\packages;
+        if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }
+        msbuild 'C:\work\wsl-plugin-sample.sln' /p:Configuration=Release /p:Platform=x64 '/p:OutDir=C:\work\build\'
+        exit \$LASTEXITCODE
+    }"
   )
 
-echo "Build complete! Output files:"
-tree "$(wslpath "$WINDOWS_PROJECT_PATH"/build)"
+# Capture the exit code from docker
+BUILD_EXIT_CODE=$?
+
+if [ $BUILD_EXIT_CODE -eq 0 ]; then
+    echo "Build successful! Output files:"
+    tree "$(wslpath "$WINDOWS_PROJECT_PATH"/build)" 2>/dev/null || echo "No output files found"
+else
+    echo "Build FAILED with exit code: $BUILD_EXIT_CODE"
+    echo "Check the compiler output above for errors."
+fi
+
+# Exit with the actual build status
+exit $BUILD_EXIT_CODE
