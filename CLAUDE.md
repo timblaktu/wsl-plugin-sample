@@ -53,7 +53,7 @@
   - Docker Desktop + Hyper-V providing native Windows container support
   - Full Windows SDK compatibility with official Microsoft support
   - Reproducible builds with version control
-- **Performance**: ~7 seconds for reliable builds with full API access
+- **Performance**: ~10 seconds for reliable builds, ~13 seconds for unit tests with full API access
 - **Infrastructure Investment**: Significant time invested in:
   - Container setup and configuration
   - Docker Desktop installation and Hyper-V configuration  
@@ -136,12 +136,12 @@ Before suggesting ANY alternative to the current container approach, provide:
 - Marked deprecated approaches (MinGW, Wine) clearly
 - Modern Windows container approach as default
 
-### 🎯 CURRENT FOCUS - MAKEFILE VALIDATION & INTEGRATION TESTING
-1. **Test new Makefile targets** - Validate `make test`, `make plugin`, `make container` work correctly
-2. **Verify bash library functions** - Test lib/container-utils.sh functions work in all scenarios
-3. **Test plugin loading in WSL** - Plugin registration and loading in actual WSL environment
-4. **Validate VSOCK communication** - Test communication with NixOS-WSL systemd-shim on port 5001
-5. **End-to-end workflow testing** - Complete plugin ↔ systemd-shim integration validation
+### 🎯 CURRENT FOCUS - INTEGRATION TESTING PHASE
+1. **Test plugin loading in WSL** - Plugin registration and loading in actual WSL environment
+2. **Validate VSOCK communication** - Test communication with NixOS-WSL systemd-shim on port 5001
+3. **End-to-end workflow testing** - Complete plugin ↔ systemd-shim integration validation
+4. **Production configuration testing** - Validate real INI configurations with complex disk setups
+5. **Performance benchmarking** - Measure plugin overhead and disk operation timing
 
 ### 🚀 PRODUCTION DEPLOYMENT - READY PHASE
 1. **Manual plugin registration testing** - Test registry setup without admin privileges
@@ -162,12 +162,11 @@ Before suggesting ANY alternative to the current container approach, provide:
 - **Repository**: `/home/tim/src/wsl-plugin-sample`
 - **Branch**: `nixdev`
 - **Container Infrastructure**: ✅ WORKING (Docker Desktop + Hyper-V, ~10s builds, ~13s tests)
-- **NuGet Package Restoration**: ✅ FIXED (explicit restore in build command)
+- **Build System**: ✅ MODERN - Makefile with container-utils.sh library, deprecated approaches clearly marked
 - **Compilation Status**: ✅ PERFECT - 0 warnings, 0 errors, clean wsl-plugin-sample.dll build
 - **Unit Testing Status**: ✅ COMPLETED - 100% pass rate (16/16 tests), Google Test framework integrated
-- **Integration Testing Status**: ✅ COMPLETED - VSOCK communication, INI parsing, NixOS-WSL integration validated
-- **Current Phase**: **PRODUCTION DEPLOYMENT** - Ready for real-world plugin installation and testing
-- **Next Phase**: Performance optimization and deployment automation
+- **Current Phase**: **INTEGRATION TESTING** - Ready for plugin loading and VSOCK communication testing
+- **Next Phase**: Production deployment and performance optimization
 
 ### Architecture
 - **Windows Plugin**: C++ DLL using WSL Plugin API for disk management
@@ -241,9 +240,12 @@ WSL plugin unit testing infrastructure fully operational:
 - **INI Configuration Parser**: Handles bare disk + VHDX requirements
 - **Logging System**: Comprehensive logging to C:\wsl-plugin-nixos.txt
 
-### Build Command
+### Build Commands
 ```bash
-./build-in-container.sh  # Includes NuGet restore + MSBuild
+make container  # One-time setup: build Windows container image
+make plugin     # Build WSL plugin DLL
+make test       # Run unit tests
+make clean      # Clean build artifacts
 ```
 
 ### Key Files
@@ -252,26 +254,31 @@ WSL plugin unit testing infrastructure fully operational:
 - `wsl-plugin-sample.vcxproj` - Project file with correct include paths
 - `packages.config` - NuGet dependencies (Microsoft.WSL.PluginApi.2.1.3)
 
-## 🔬 NEXT INVESTIGATION STRATEGIES
+## 🛠️ BUILD SYSTEM ARCHITECTURE (2025-10-23)
 
-### Immediate Actions
-1. **Header Dependency Analysis**: Use `/showIncludes` to trace what's pulling in ntddstor.h
-2. **Precompiled Headers**: Force specific include order with compiler directives
-3. **External GUID Declarations**: Replace DEFINE_GUID with extern declarations
-4. **SDK Version Testing**: Try Windows SDK 10.0.18362 or older versions
+### Modern Makefile Implementation ✅ COMPLETED
+- **Single Source of Truth**: Makefile consolidates all build logic with proper targets
+- **Shared Library**: `lib/container-utils.sh` provides reusable container functions
+- **Deprecated Approaches Marked**: MinGW and Wine targets clearly marked as deprecated
+- **Production Workflow**: `make container` → `make plugin` → `make test` → `make install`
 
-### Alternative Approaches
-1. **MinGW Cross-Compilation**: Use MinGW from Linux instead of MSVC
-2. **Static Library Isolation**: Compile problematic functions separately
-3. **PowerShell-Only Implementation**: Eliminate all storage APIs, use cmdlets
-4. **Different Container Base**: Try different Windows container images
+### Key Build Targets
+- **`make container`**: Build Windows container image with MSVC build tools (one-time setup)
+- **`make plugin`**: Build WSL plugin DLL using Windows container
+- **`make test`**: Run unit tests using Windows container
+- **`make integration-test`**: Run NixOS framework integration tests
+- **`make clean`**: Clean build artifacts
+- **`make install`**: Show installation instructions
 
 ## 📊 SUCCESS METRICS
 - [x] **Clean compilation** - 0 errors, 0 warnings achieved  
 - [x] **GUID conflicts resolved** - Proper initguid.h approach implemented
-- [x] **wsl-plugin-sample.dll builds successfully** - Production-ready binary created
-- [ ] **Plugin loads correctly in WSL environment** - Next testing phase
-- [ ] **Demo functionality validated** - INI parsing, logging, callbacks testing
+- [x] **wsl-plugin-sample.dll builds successfully** - Production-ready binary created (523KB)
+- [x] **Unit testing infrastructure** - 100% pass rate (16/16 tests) with Google Test framework
+- [x] **Build system modernization** - Makefile with container-utils.sh library
+- [x] **Code duplication eliminated** - Shared parser architecture implemented
+- [ ] **Plugin loads correctly in WSL environment** - Integration testing phase
+- [ ] **VSOCK communication validated** - End-to-end workflow testing
 
 ## 🔗 INTEGRATION POINTS
 
@@ -285,13 +292,14 @@ WSL plugin unit testing infrastructure fully operational:
 - **Configuration Format**: INI with [bare_disk_*] and [vhdx_*] sections
 - **Response Protocol**: STATUS ready/notReady + MESSAGE
 
-## 🧪 UNIT TESTING STRATEGY - NEW FOCUS (2025-10-23)
+## 🧪 UNIT TESTING INFRASTRUCTURE - ✅ COMPLETED (2025-10-23)
 
-### Current Test Coverage Analysis
-**FINDING**: ❌ **NO UNIT TESTS EXIST** - Project has only integration test .nix files
-- **Existing Files**: `simple-plugin-test.nix`, `wsl-plugin-test.nix`, `nixos-wsl-test.nix` (integration tests)
-- **Missing**: Comprehensive C++ unit test coverage for core functionality
-- **Risk**: Integration testing without unit test foundation is inefficient and unreliable
+### Unit Test Coverage Status
+**ACHIEVEMENT**: ✅ **COMPREHENSIVE UNIT TESTS IMPLEMENTED** - 100% pass rate with Google Test framework
+- **Test Files**: `tests/unit/ini_parser_test.cpp`, `tests/unit/string_conversion_test.cpp`, `tests/unit/windows_api_mock_test.cpp`
+- **Integration Files**: `simple-plugin-test.nix`, `wsl-plugin-test.nix`, `nixos-wsl-test.nix` (NixOS framework tests)
+- **Test Results**: 16/16 tests passing (7 INI parser + 9 string conversion)
+- **Architecture**: Shared parser eliminates code duplication, container-aware fixture loading
 
 ### Critical Components Requiring Unit Tests
 **Priority 1 - Core Functionality**:
@@ -377,18 +385,24 @@ tests/
 - **Maintainability**: Clear test names, good fixture organization, minimal duplication
 
 ## 📝 NOTES FOR NEXT SESSION - UPDATED 2025-10-23 ✅
-- **STATUS**: Unit Testing Infrastructure 100% COMPLETED ✅ - Ready for integration testing phase
-- **Container infrastructure**: Mature and reliable (~13s builds, ~13s tests, 0 failures)
-- **Google Test framework**: Fully integrated via NuGet with auto-linking, all tests passing
-- **Shared parser architecture**: Code duplication eliminated, single source of truth established
-- **Test results**: 100% pass rate (16/16 tests) - All core functionality validated
-- **PRIMARY FOCUS**: **Integration Testing Phase** - Plugin loading in WSL and VSOCK communication
-- **NEXT OBJECTIVES**: 
-  1. Test plugin loading and registration in actual WSL environment
-  2. Validate VSOCK communication with NixOS-WSL systemd-shim on port 5001
-  3. End-to-end workflow testing with real INI configurations
-  4. Create production installation and deployment documentation
-  5. Performance benchmarking and optimization for production use
+
+### ✅ COMPLETED PHASES (100% Done)
+- **Build Phase**: Clean compilation, 0 warnings/errors, proper Windows SDK patterns
+- **Unit Testing Phase**: 100% pass rate (16/16 tests), Google Test framework, shared parser architecture  
+- **Build System Cleanup**: Modern Makefile with container-utils.sh, deprecated approaches marked
+
+### 🎯 CURRENT PHASE: INTEGRATION TESTING
+- **Container infrastructure**: Mature and reliable (~10s builds, ~13s tests, 0 failures)
+- **Plugin binary**: Production-ready wsl-plugin-sample.dll (523KB)
+- **Test infrastructure**: Comprehensive unit testing with Google Test framework
+- **Build system**: Modern Makefile with `make plugin`, `make test`, `make container` targets
+
+### 🚀 NEXT OBJECTIVES (Integration Testing Phase):
+1. **Test plugin loading and registration** in actual WSL environment
+2. **Validate VSOCK communication** with NixOS-WSL systemd-shim on port 5001
+3. **End-to-end workflow testing** with real INI configurations
+4. **Create production installation guide** with deployment documentation
+5. **Performance benchmarking** and optimization for production use
 
 ### Recent Achievements (2025-10-23):
 - ✅ **Fixed fixture loading** - 6-path fallback strategy resolves all container/Linux/Windows environments
