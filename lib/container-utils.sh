@@ -76,9 +76,18 @@ build_plugin_in_container() {
     check_container_image || return 1
     sync_to_windows
     
-    local build_command='Write-Host \"Restoring NuGet packages...\"; C:\\BuildTools\\nuget.exe restore C:\\work\\packages.config -PackagesDirectory C:\\work\\packages; if ($LASTEXITCODE -ne 0) { Write-Host \"NuGet restore failed!\"; exit $LASTEXITCODE }; Write-Host \"Building plugin...\"; msbuild \"C:\\work\\wsl-plugin-sample.vcxproj\" /t:Rebuild /p:Configuration=Release /p:Platform=x64 \"/p:OutDir=C:\\work\\\"; if ($LASTEXITCODE -ne 0) { Write-Host \"Plugin build failed!\"; exit $LASTEXITCODE }; Write-Host \"Copying plugin to root...\"; Copy-Item \"C:\\work\\wsl-plugin-sample.dll\" \"C:\\work\\\" -Force; Write-Host \"Plugin built successfully!\";'
+    local build_command='Write-Host \"Restoring NuGet packages...\"; C:\\BuildTools\\nuget.exe restore C:\\work\\packages.config -PackagesDirectory C:\\work\\packages; if ($LASTEXITCODE -ne 0) { Write-Host \"NuGet restore failed!\"; exit $LASTEXITCODE }; Write-Host \"Building plugin...\"; msbuild \"C:\\work\\wsl-plugin-sample.vcxproj\" /t:Rebuild /p:Configuration=Release /p:Platform=x64 \"/p:OutDir=C:\\work\\\"; if ($LASTEXITCODE -ne 0) { Write-Host \"Plugin build failed!\"; exit $LASTEXITCODE }; Write-Host \"Plugin built successfully!\";'
     
     run_in_container "$build_command"
+    
+    # Copy built plugin back to WSL working directory
+    local win_path_from_wsl=$(wslpath "$(wsl_to_windows_sync_path .)")
+    if [ -f "$win_path_from_wsl/wsl-plugin-sample.dll" ]; then
+        cp "$win_path_from_wsl/wsl-plugin-sample.dll" .
+        echo "📋 Plugin copied to working directory"
+    else
+        echo "⚠️  Plugin not found in Windows sync directory"
+    fi
 }
 
 # Build and run unit tests in Windows container
