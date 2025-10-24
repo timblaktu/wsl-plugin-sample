@@ -1,145 +1,40 @@
 // Unit tests for INI configuration parser
 #include "gtest/gtest.h"
-#include <windows.h>  // Required for DWORD, CP_UTF8, MultiByteToWideChar
-#include <string>
-#include <vector>
-#include <sstream>
 #include <fstream>
-#include <codecvt>
-#include <locale>
 #include <iostream>
 
-// We need to include the structures and function from plugin.cpp
-// Since we can't include plugin.cpp directly (it has DLL entry points),
-// we'll recreate the essential structures and function for testing
+// Use shared INI parser implementation to avoid code duplication
+#include "../../shared/ini_parser.h"
 
-// Data structures from plugin.cpp
-struct BareDisk {
-    std::wstring uuid;
-    std::wstring label;
-};
-
-struct VhdxConfig {
-    std::wstring path;
-    DWORD sizeGB;
-    std::wstring filesystem;
-};
-
-struct DiskRequirements {
-    std::vector<BareDisk> bareDisks;
-    std::vector<VhdxConfig> vhdxs;
-};
-
-// Copy of ParseIniConfig function for testing
-DiskRequirements ParseIniConfig(const std::string& iniContent) {
-    DiskRequirements reqs;
-    std::istringstream stream(iniContent);
-    std::string line;
-    std::string currentSection;
-    
-    BareDisk currentBareDisk;
-    VhdxConfig currentVhdx;
-    bool inBareDisk = false;
-    bool inVhdx = false;
-    
-    while (std::getline(stream, line)) {
-        // Trim whitespace
-        line.erase(0, line.find_first_not_of(" \t\r\n"));
-        line.erase(line.find_last_not_of(" \t\r\n") + 1);
-        
-        // Skip empty lines and comments
-        if (line.empty() || line[0] == '#' || line[0] == ';') continue;
-        
-        // Check for section headers
-        if (line[0] == '[') {
-            // Save previous section if applicable
-            if (inBareDisk && !currentBareDisk.uuid.empty()) {
-                reqs.bareDisks.push_back(currentBareDisk);
-            }
-            if (inVhdx && !currentVhdx.path.empty()) {
-                reqs.vhdxs.push_back(currentVhdx);
-            }
-            
-            size_t end = line.find(']');
-            if (end == std::string::npos) continue;
-            
-            currentSection = line.substr(1, end - 1);
-            
-            // Reset state
-            inBareDisk = currentSection.find("bare_disk_") == 0;
-            inVhdx = currentSection.find("vhdx_") == 0;
-            
-            if (inBareDisk) {
-                currentBareDisk = BareDisk();
-            }
-            if (inVhdx) {
-                currentVhdx = VhdxConfig();
-            }
-            
-            continue;
-        }
-        
-        // Parse key-value pairs
-        size_t eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        
-        std::string key = line.substr(0, eq);
-        std::string value = line.substr(eq + 1);
-        
-        // Trim key and value
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        value.erase(0, value.find_first_not_of(" \t"));
-        value.erase(value.find_last_not_of(" \t") + 1);
-        
-        // Convert to wide string using proper UTF-8 decoding
-        int wideSize = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, NULL, 0);
-        std::wstring wideValue(wideSize, 0);
-        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, &wideValue[0], wideSize);
-        wideValue.resize(wideSize - 1); // Remove null terminator
-        
-        if (inBareDisk) {
-            if (key == "uuid") {
-                currentBareDisk.uuid = wideValue;
-            } else if (key == "label") {
-                currentBareDisk.label = wideValue;
-            }
-        } else if (inVhdx) {
-            if (key == "path") {
-                currentVhdx.path = wideValue;
-            } else if (key == "size_gb") {
-                try {
-                    currentVhdx.sizeGB = std::stoul(value);
-                } catch (const std::exception&) {
-                    currentVhdx.sizeGB = 0; // Default to 0 for invalid values
-                }
-            } else if (key == "filesystem") {
-                currentVhdx.filesystem = wideValue;
-            }
-        }
-    }
-    
-    // Save final section
-    if (inBareDisk && !currentBareDisk.uuid.empty()) {
-        reqs.bareDisks.push_back(currentBareDisk);
-    }
-    if (inVhdx && !currentVhdx.path.empty()) {
-        reqs.vhdxs.push_back(currentVhdx);
-    }
-    
-    return reqs;
-}
-
-// Helper function to load test fixture
+// Helper function to load test fixture with container-aware path resolution
 std::string LoadTestFixture(const std::string& filename) {
-    std::ifstream file("../tests/fixtures/sample_configs/" + filename);
-    if (!file.is_open()) {
-        return "";
+    // Try multiple possible paths for different build environments
+    std::vector<std::string> searchPaths = {
+        "../tests/fixtures/sample_configs/",           // Relative from test binary (Linux/WSL)
+        "tests/fixtures/sample_configs/",              // Relative from project root
+        "C:/work/tests/fixtures/sample_configs/",      // Container absolute path
+        "./tests/fixtures/sample_configs/",            // Current directory relative
+        "../sample_configs/",                          // Simplified relative
+        "sample_configs/"                              // Local directory
+    };
+    
+    for (const auto& basePath : searchPaths) {
+        std::string fullPath = basePath + filename;
+        std::ifstream file(fullPath);
+        if (file.is_open()) {
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            return buffer.str();
+        }
     }
     
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
+    // If no file found, log the attempted paths for debugging
+    std::cerr << "LoadTestFixture: Could not find " << filename << " in any of the following paths:" << std::endl;
+    for (const auto& path : searchPaths) {
+        std::cerr << "  - " << path + filename << std::endl;
+    }
+    
+    return "";
 }
 
 // Test class for INI parser

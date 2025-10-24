@@ -38,6 +38,9 @@
 // WSL Plugin API (should come after Windows headers)
 #include "WslPluginApi.h"
 
+// Shared INI parser and data structures
+#include "shared/ini_parser.h"
+
 #pragma comment(lib, "wbemuuid.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -57,23 +60,6 @@ const GUID ServiceGuid5001 = {
 // Global variables
 std::ofstream g_logfile;
 const WSLPluginAPIV1* g_api = nullptr;
-
-// Data structures for disk requirements
-struct BareDisk {
-    std::wstring uuid;
-    std::wstring label;
-};
-
-struct VhdxConfig {
-    std::wstring path;
-    DWORD sizeGB;
-    std::wstring filesystem;
-};
-
-struct DiskRequirements {
-    std::vector<BareDisk> bareDisks;
-    std::vector<VhdxConfig> vhdxs;
-};
 
 struct ValidationResult {
     bool allReady;
@@ -201,102 +187,12 @@ GUID GetVmGuidForDistribution(PCWSTR distributionName) {
     return vmGuid;
 }
 
-// Parse INI configuration received from shim
-DiskRequirements ParseIniConfig(const std::string& iniContent) {
-    DiskRequirements reqs;
-    std::istringstream stream(iniContent);
-    std::string line;
-    std::string currentSection;
-    
-    BareDisk currentBareDisk;
-    VhdxConfig currentVhdx;
-    bool inBareDisk = false;
-    bool inVhdx = false;
-    
+// Parse INI configuration wrapper with logging - uses shared parser implementation
+DiskRequirements ParseIniConfigWithLogging(const std::string& iniContent) {
     LogMessage("Parsing INI configuration");
     
-    while (std::getline(stream, line)) {
-        // Trim whitespace
-        line.erase(0, line.find_first_not_of(" \t\r\n"));
-        line.erase(line.find_last_not_of(" \t\r\n") + 1);
-        
-        // Skip empty lines and comments
-        if (line.empty() || line[0] == '#' || line[0] == ';') continue;
-        
-        // Check for section headers
-        if (line[0] == '[') {
-            // Save previous section if applicable
-            if (inBareDisk && !currentBareDisk.uuid.empty()) {
-                reqs.bareDisks.push_back(currentBareDisk);
-                LogMessage("Added bare disk with UUID");
-            }
-            if (inVhdx && !currentVhdx.path.empty()) {
-                reqs.vhdxs.push_back(currentVhdx);
-                LogMessage("Added VHDX configuration");
-            }
-            
-            size_t end = line.find(']');
-            if (end == std::string::npos) continue;
-            
-            currentSection = line.substr(1, end - 1);
-            
-            // Reset state
-            inBareDisk = currentSection.find("bare_disk_") == 0;
-            inVhdx = currentSection.find("vhdx_") == 0;
-            
-            if (inBareDisk) {
-                currentBareDisk = BareDisk();
-            }
-            if (inVhdx) {
-                currentVhdx = VhdxConfig();
-            }
-            
-            continue;
-        }
-        
-        // Parse key-value pairs
-        size_t eq = line.find('=');
-        if (eq == std::string::npos) continue;
-        
-        std::string key = line.substr(0, eq);
-        std::string value = line.substr(eq + 1);
-        
-        // Trim key and value
-        key.erase(0, key.find_first_not_of(" \t"));
-        key.erase(key.find_last_not_of(" \t") + 1);
-        value.erase(0, value.find_first_not_of(" \t"));
-        value.erase(value.find_last_not_of(" \t") + 1);
-        
-        // Convert to wide string using proper UTF-8 decoding
-        int wideSize = MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, NULL, 0);
-        std::wstring wideValue(wideSize, 0);
-        MultiByteToWideChar(CP_UTF8, 0, value.c_str(), -1, &wideValue[0], wideSize);
-        wideValue.resize(wideSize - 1); // Remove null terminator
-        
-        if (inBareDisk) {
-            if (key == "uuid") {
-                currentBareDisk.uuid = wideValue;
-            } else if (key == "label") {
-                currentBareDisk.label = wideValue;
-            }
-        } else if (inVhdx) {
-            if (key == "path") {
-                currentVhdx.path = wideValue;
-            } else if (key == "size_gb") {
-                currentVhdx.sizeGB = std::stoul(value);
-            } else if (key == "filesystem") {
-                currentVhdx.filesystem = wideValue;
-            }
-        }
-    }
-    
-    // Save final section
-    if (inBareDisk && !currentBareDisk.uuid.empty()) {
-        reqs.bareDisks.push_back(currentBareDisk);
-    }
-    if (inVhdx && !currentVhdx.path.empty()) {
-        reqs.vhdxs.push_back(currentVhdx);
-    }
+    // Use shared parser implementation
+    DiskRequirements reqs = ParseIniConfig(iniContent);
     
     LogMessage("Parsed " + std::to_string(reqs.bareDisks.size()) + " bare disks and " + 
                std::to_string(reqs.vhdxs.size()) + " VHDX configurations");
@@ -593,7 +489,7 @@ HRESULT OnDistroStarted(const WSLSessionInformation* Session, const WSLDistribut
             LogMessage("Demo mode: Using sample configuration");
             
             // Parse configuration
-            DiskRequirements reqs = ParseIniConfig(demoConfig);
+            DiskRequirements reqs = ParseIniConfigWithLogging(demoConfig);
             
             // Validate and mount disks
             ValidationResult validation = ValidateAndMountDisks(Distribution->Name, reqs);
@@ -691,7 +587,7 @@ HRESULT OnDistroStarted(const WSLSessionInformation* Session, const WSLDistribut
         LogMessage("Received " + std::to_string(configContent.size()) + " bytes of configuration");
         
         // Parse configuration
-        DiskRequirements reqs = ParseIniConfig(configContent);
+        DiskRequirements reqs = ParseIniConfigWithLogging(configContent);
         
         // Validate and mount disks
         ValidationResult validation = ValidateAndMountDisks(Distribution->Name, reqs);
