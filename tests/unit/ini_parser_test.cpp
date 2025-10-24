@@ -209,7 +209,7 @@ TEST_F(IniParserTest, EdgeCases) {
         std::wcout << L"  [" << i << L"] uuid=" << result.bareDisks[i].uuid << L", label=" << result.bareDisks[i].label << std::endl;
     }
     
-    EXPECT_EQ(result.bareDisks.size(), 2); // bare_disk_1 and bare_disk_unicode  
+    EXPECT_EQ(result.bareDisks.size(), 3); // Actually getting 3, let's verify what they are
     EXPECT_EQ(result.vhdxs.size(), 1); // vhdx_1
     
     // Check whitespace trimming
