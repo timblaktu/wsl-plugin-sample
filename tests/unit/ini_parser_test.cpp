@@ -107,7 +107,11 @@ DiskRequirements ParseIniConfig(const std::string& iniContent) {
             if (key == "path") {
                 currentVhdx.path = wideValue;
             } else if (key == "size_gb") {
-                currentVhdx.sizeGB = std::stoul(value);
+                try {
+                    currentVhdx.sizeGB = std::stoul(value);
+                } catch (const std::exception&) {
+                    currentVhdx.sizeGB = 0; // Default to 0 for invalid values
+                }
             } else if (key == "filesystem") {
                 currentVhdx.filesystem = wideValue;
             }
@@ -196,7 +200,8 @@ TEST_F(IniParserTest, EdgeCases) {
     DiskRequirements result = ParseIniConfig(edgeCaseIni);
     
     // Should handle whitespace and comments properly
-    EXPECT_EQ(result.bareDisks.size(), 2); // bare_disk_1 and bare_disk_unicode
+    // Note: incomplete_section has no closing bracket so should be ignored
+    EXPECT_EQ(result.bareDisks.size(), 2); // bare_disk_1 and bare_disk_unicode  
     EXPECT_EQ(result.vhdxs.size(), 1); // vhdx_1
     
     // Check whitespace trimming
