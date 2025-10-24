@@ -76,23 +76,7 @@ build_plugin_in_container() {
     check_container_image || return 1
     sync_to_windows
     
-    local build_command='
-        Write-Host "Restoring NuGet packages...";
-        C:\BuildTools\nuget.exe restore C:\work\packages.config -PackagesDirectory C:\work\packages;
-        if ($LASTEXITCODE -ne 0) { 
-            Write-Host "NuGet restore failed!";
-            exit $LASTEXITCODE 
-        }
-        
-        Write-Host "Building plugin...";
-        msbuild "C:\work\wsl-plugin-sample.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=x64 "/p:OutDir=C:\work\build\";
-        if ($LASTEXITCODE -ne 0) { 
-            Write-Host "Plugin build failed!";
-            exit $LASTEXITCODE 
-        }
-        
-        Write-Host "Plugin built successfully!";
-    '
+    local build_command='Write-Host \"Restoring NuGet packages...\"; C:\\BuildTools\\nuget.exe restore C:\\work\\packages.config -PackagesDirectory C:\\work\\packages; if (\$LASTEXITCODE -ne 0) { Write-Host \"NuGet restore failed!\"; exit \$LASTEXITCODE }; Write-Host \"Building plugin...\"; msbuild \"C:\\work\\wsl-plugin-sample.vcxproj\" /t:Rebuild /p:Configuration=Release /p:Platform=x64 \"/p:OutDir=C:\\work\\build\\\"; if (\$LASTEXITCODE -ne 0) { Write-Host \"Plugin build failed!\"; exit \$LASTEXITCODE }; Write-Host \"Plugin built successfully!\";'
     
     run_in_container "$build_command"
 }
@@ -104,34 +88,7 @@ build_and_run_tests_in_container() {
     check_container_image || return 1
     sync_to_windows
     
-    local test_command='
-        Write-Host "Restoring NuGet packages...";
-        C:\BuildTools\nuget.exe restore C:\work\packages.config -PackagesDirectory C:\work\packages;
-        if ($LASTEXITCODE -ne 0) { 
-            Write-Host "NuGet restore failed!";
-            exit $LASTEXITCODE 
-        }
-        
-        Write-Host "Building unit tests...";
-        msbuild "C:\work\wsl-plugin-tests.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=x64 "/p:OutDir=C:\work\test-build\";
-        if ($LASTEXITCODE -ne 0) { 
-            Write-Host "Test build failed!";
-            exit $LASTEXITCODE 
-        }
-        
-        if (Test-Path "C:\work\test-build\wsl-plugin-tests.exe") {
-            Write-Host "Running unit tests...";
-            Set-Location "C:\work\test-build";
-            .\wsl-plugin-tests.exe;
-            $testExitCode = $LASTEXITCODE;
-            Write-Host "Tests completed with exit code: $testExitCode";
-            exit $testExitCode;
-        } else {
-            Write-Host "Test executable not found!";
-            Get-ChildItem C:\work\test-build -ErrorAction SilentlyContinue;
-            exit 1;
-        }
-    '
+    local test_command='Write-Host \"Restoring NuGet packages...\"; C:\\BuildTools\\nuget.exe restore C:\\work\\packages.config -PackagesDirectory C:\\work\\packages; if (\$LASTEXITCODE -ne 0) { Write-Host \"NuGet restore failed!\"; exit \$LASTEXITCODE }; Write-Host \"Building unit tests...\"; msbuild \"C:\\work\\wsl-plugin-tests.vcxproj\" /t:Rebuild /p:Configuration=Release /p:Platform=x64 \"/p:OutDir=C:\\work\\test-build\\\"; if (\$LASTEXITCODE -ne 0) { Write-Host \"Test build failed!\"; exit \$LASTEXITCODE }; if (Test-Path \"C:\\work\\test-build\\wsl-plugin-tests.exe\") { Write-Host \"Running unit tests...\"; Set-Location \"C:\\work\\test-build\"; .\\wsl-plugin-tests.exe; \$testExitCode = \$LASTEXITCODE; Write-Host \"Tests completed with exit code: \$testExitCode\"; exit \$testExitCode; } else { Write-Host \"Test executable not found!\"; Get-ChildItem C:\\work\\test-build -ErrorAction SilentlyContinue; exit 1; }'
     
     run_in_container "$test_command"
 }
