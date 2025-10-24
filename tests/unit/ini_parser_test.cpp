@@ -127,7 +127,7 @@ DiskRequirements ParseIniConfig(const std::string& iniContent) {
 
 // Helper function to load test fixture
 std::string LoadTestFixture(const std::string& filename) {
-    std::ifstream file("../fixtures/sample_configs/" + filename);
+    std::ifstream file("../tests/fixtures/sample_configs/" + filename);
     if (!file.is_open()) {
         return "";
     }
