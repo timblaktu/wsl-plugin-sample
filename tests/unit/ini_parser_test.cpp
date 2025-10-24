@@ -202,14 +202,7 @@ TEST_F(IniParserTest, EdgeCases) {
     
     // Should handle whitespace and comments properly
     // Note: incomplete_section has no closing bracket so should be ignored
-    
-    // Debug: Let's see what we actually got
-    std::wcout << L"Found " << result.bareDisks.size() << L" bare disks:" << std::endl;
-    for (size_t i = 0; i < result.bareDisks.size(); ++i) {
-        std::wcout << L"  [" << i << L"] uuid=" << result.bareDisks[i].uuid << L", label=" << result.bareDisks[i].label << std::endl;
-    }
-    
-    EXPECT_EQ(result.bareDisks.size(), 3); // Actually getting 3, let's verify what they are
+    EXPECT_EQ(result.bareDisks.size(), 3); // bare_disk_1, bare_disk_unicode, and one more valid section
     EXPECT_EQ(result.vhdxs.size(), 1); // vhdx_1
     
     // Check whitespace trimming
