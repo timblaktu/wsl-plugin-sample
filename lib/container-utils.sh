@@ -31,7 +31,8 @@ sync_to_windows() {
     local branch=$(git branch --show-current) 
 
     echo "📝 Committing local changes before syncing to Windows..."
-    ( set -x; git add -A; git commit -m "Update files for container build" || true )
+    local commit_msg=$(~/src/nixcfg/home/files/bin/claudefuncs.sh 2>/dev/null || echo "Update files for container build")
+    ( set -x; git add -A; git commit -m "$commit_msg" || true )
 
     if [ ! -d "$win_path_from_wsl" ]; then
         mkdir -p "$(dirname "$win_path_from_wsl")"
