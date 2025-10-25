@@ -82,5 +82,5 @@ else
     echo "Check the compiler output above for errors."
 fi
 
-# Exit with the actual build status
+# Exit with the actual build status - DUMMY CHANGE TO FORCE GIT SYNC
 exit $BUILD_EXIT_CODE

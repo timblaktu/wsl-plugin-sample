@@ -384,18 +384,20 @@ tests/
 - **Reliability**: 100% reproducible test results across container builds
 - **Maintainability**: Clear test names, good fixture organization, minimal duplication
 
-## 📝 NOTES FOR NEXT SESSION - UPDATED 2025-10-23 ✅
+## 📝 NOTES FOR NEXT SESSION - UPDATED 2025-10-25 ✅
 
 ### ✅ COMPLETED PHASES (100% Done)
 - **Build Phase**: Clean compilation, 0 warnings/errors, proper Windows SDK patterns
 - **Unit Testing Phase**: 100% pass rate (16/16 tests), Google Test framework, shared parser architecture  
 - **Build System Cleanup**: Modern Makefile with container-utils.sh, deprecated approaches marked
+- **Intelligent Commit Messages**: Integrated claudefuncs.sh helper for automated commit message generation
 
 ### 🎯 CURRENT PHASE: INTEGRATION TESTING
 - **Container infrastructure**: Mature and reliable (~10s builds, ~13s tests, 0 failures)
 - **Plugin binary**: Production-ready wsl-plugin-sample.dll (523KB)
 - **Test infrastructure**: Comprehensive unit testing with Google Test framework
 - **Build system**: Modern Makefile with `make plugin`, `make test`, `make container` targets
+- **Commit automation**: sync_to_windows() now uses Claude Code to generate intelligent commit messages
 
 ### 🚀 NEXT OBJECTIVES (Integration Testing Phase):
 1. **Test plugin loading and registration** in actual WSL environment
@@ -404,7 +406,13 @@ tests/
 4. **Create production installation guide** with deployment documentation
 5. **Performance benchmarking** and optimization for production use
 
-### Recent Achievements (2025-10-23):
+### Recent Achievements (2025-10-25):
+- ✅ **Intelligent commit messages** - Replaced hard-coded "Update files for container build" with claudefuncs.sh helper
+- ✅ **Graceful fallback** - sync_to_windows() maintains original behavior if helper fails
+- ✅ **Human-authored commits** - Adheres to CLAUDE.md requirement for non-AI-attributed commit messages
+- ✅ **Build system enhancement** - Container workflow now generates descriptive commit messages based on actual changes
+
+### Previous Achievements (2025-10-23):
 - ✅ **Fixed fixture loading** - 6-path fallback strategy resolves all container/Linux/Windows environments
 - ✅ **Eliminated code duplication** - Created shared/ini_parser.h, removed 98 lines of duplicate code
 - ✅ **100% test success** - All INI parser tests (7/7) and string conversion tests (9/9) passing
