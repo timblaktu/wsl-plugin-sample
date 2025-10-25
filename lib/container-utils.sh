@@ -31,7 +31,7 @@ sync_to_windows() {
     local branch=$(git branch --show-current) 
 
     echo "📝 Committing local changes before syncing to Windows..."
-    local commit_msg=$(~/src/nixcfg/home/files/bin/claudefuncs.sh 2>/dev/null || echo "Update files for container build")
+    local commit_msg=$(source ~/src/nixcfg/home/files/lib/claude-utils.bash 2>/dev/null && clc_get_commit_message 2>/dev/null || echo "Update files for container build")
     ( set -x; git add -A; git commit -m "$commit_msg" || true )
 
     if [ ! -d "$win_path_from_wsl" ]; then
