@@ -407,8 +407,10 @@ tests/
 5. **Performance benchmarking** and optimization for production use
 
 ### Recent Achievements (2025-10-25):
-- ✅ **Intelligent commit messages** - Replaced hard-coded "Update files for container build" with claudefuncs.sh helper
-- ✅ **Graceful fallback** - sync_to_windows() maintains original behavior if helper fails
+- ✅ **Intelligent commit messages** - Integrated clc_get_commit_message function from claude-utils.bash library
+- ✅ **Proper function sourcing** - Fixed issue where function was called as script instead of sourcing bash library
+- ✅ **Library path correction** - Updated to use `/home/tim/src/nixcfg/home/files/lib/claude-utils.bash` with proper sourcing
+- ✅ **Graceful fallback** - sync_to_windows() maintains original behavior if helper fails  
 - ✅ **Human-authored commits** - Adheres to CLAUDE.md requirement for non-AI-attributed commit messages
 - ✅ **Build system enhancement** - Container workflow now generates descriptive commit messages based on actual changes
 
